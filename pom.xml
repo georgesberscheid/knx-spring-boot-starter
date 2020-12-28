@@ -1,0 +1,62 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>lu.berscheid.knx</groupId>
+	<artifactId>knx-spring-boot-parent</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>pom</packaging>
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.4.0</version>
+		<relativePath />
+	</parent>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>lu.berscheid.knx</groupId>
+				<artifactId>knx-device-model</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>lu.berscheid.knx</groupId>
+				<artifactId>knx-device-manager</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>lu.berscheid.knx</groupId>
+				<artifactId>knx-product-generator</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>lu.berscheid.knx</groupId>
+				<artifactId>knx-spring-boot-autoconfigure</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>commons-io</groupId>
+				<artifactId>commons-io</artifactId>
+				<version>2.8.0</version>
+			</dependency>
+			<dependency>
+				<groupId>com.github.rvesse</groupId>
+				<artifactId>airline</artifactId>
+				<version>2.7.2</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<modules>
+		<module>knx-device-manager</module>
+		<module>knx-device-model</module>
+		<module>knx-product-generator</module>
+		<module>knx-spring-boot-autoconfigure</module>
+		<!-- <module>knx-spring-boot-automower</module> -->
+		<module>knx-spring-boot-sample</module>
+	</modules>
+
+</project>
