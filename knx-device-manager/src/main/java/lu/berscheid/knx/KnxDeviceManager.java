@@ -14,6 +14,7 @@ import tuwien.auto.calimero.datapoint.Datapoint;
 import tuwien.auto.calimero.datapoint.StateDP;
 import tuwien.auto.calimero.device.BaseKnxDevice;
 import tuwien.auto.calimero.device.KnxDevice;
+import tuwien.auto.calimero.device.ios.InterfaceObject;
 import tuwien.auto.calimero.dptxlator.DPT;
 import tuwien.auto.calimero.dptxlator.DPTXlator4ByteFloat;
 import tuwien.auto.calimero.dptxlator.DPTXlator4ByteSigned;
@@ -21,6 +22,7 @@ import tuwien.auto.calimero.dptxlator.DPTXlator64BitSigned;
 import tuwien.auto.calimero.dptxlator.DPTXlatorBoolean;
 import tuwien.auto.calimero.dptxlator.DPTXlatorDateTime;
 import tuwien.auto.calimero.dptxlator.DPTXlatorString;
+import tuwien.auto.calimero.mgmt.PropertyAccess.PID;
 
 @Slf4j
 public class KnxDeviceManager {
@@ -93,11 +95,20 @@ public class KnxDeviceManager {
 
 	private void startDeviceRuntime(KnxDeviceConfig deviceConfig) throws KNXException {
 		KnxDeviceLogic logic = new KnxDeviceLogic(deviceConfig);
-		// We're using device descriptor 0x07B0 because it's also the mask version used in the application program of the
-		// generated .knxprod file.
-		KnxDevice device = new BaseKnxDevice(deviceConfig.getApplicationName(), DeviceDescriptor.DD0.TYPE_07B0, logic,
-				logic, null, new char[] { 0 });
+
+		KnxDevice device = new BaseKnxDevice(deviceConfig.getApplicationName(), logic);
+
+		// Set the manufacturer ID provided by the device configuration
+		int manufacturerId = Integer.parseInt(deviceConfig.getManufacturerRefId().substring(2), 16);
+		device.getInterfaceObjectServer().setProperty(InterfaceObject.DEVICE_OBJECT, PID.MANUFACTURER_ID, 1, 1,
+				new byte[] { (byte) (manufacturerId >> 8), (byte) manufacturerId });
+
+		// Set the device descriptor to 0x07B0 = mask version of the application program of the generated .knxprod file.
+		device.getInterfaceObjectServer().setProperty(InterfaceObject.DEVICE_OBJECT, PID.DEVICE_DESCRIPTOR, 1, 1,
+				DeviceDescriptor.DD0.TYPE_07B0.toByteArray());
+
 		logic.setDevice(device);
+		logic.setProgrammingMode(true);
 
 		// Register all group object datapoints
 		for (KnxGroupObjectConfig groupObjectConfig : deviceConfig.getGroupObjects()) {

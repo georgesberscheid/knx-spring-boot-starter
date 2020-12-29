@@ -71,18 +71,29 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 			className = className.substring(0, className.indexOf("$$"));
 		}
 		config.setDeviceInstance(bean);
-		config.setIndividualAddress(annotation.individualAddress());
-		config.setManufacturerRefId(annotation.manufacturerRefId());
-		config.setApplicationName(
-				annotation.applicationName().equals("") ? className : annotation.applicationName());
+		config.setIndividualAddress(beanFactory.resolveEmbeddedValue(annotation.individualAddress()));
+		config.setManufacturerRefId(beanFactory.resolveEmbeddedValue(annotation.manufacturerRefId()));
+		// Validate manufacturer ID
+		if (config.getManufacturerRefId() == null || !config.getManufacturerRefId().startsWith("M-")
+				|| !(config.getManufacturerRefId().length() == 6)) {
+			log.error("Invalid manufacturer ID : " + config.getManufacturerRefId()
+					+ ". Needs to start with 'M-' followed by 2 bytes integer hex representation (e.g. M-00FA).");
+			return bean;
+		}
+		try {
+			Integer.parseInt(config.getManufacturerRefId().substring(2), 16);
+		} catch (Exception e) {
+			log.error("Invalid manufacturer ID : " + config.getManufacturerRefId()
+					+ ". Needs to start with 'M-' followed by 2 bytes integer hex representation (e.g. M-00FA).");
+			return bean;
+		}
+		config.setApplicationName(annotation.applicationName().equals("") ? className : annotation.applicationName());
 		config.setApplicationNumber(annotation.applicationNumber());
 		config.setApplicationVersion(annotation.applicationVersion());
-		config.setHardwareName(
-				annotation.hardwareName().equals("") ? className : annotation.hardwareName());
+		config.setHardwareName(annotation.hardwareName().equals("") ? className : annotation.hardwareName());
 		config.setHardwareSerialNumber(annotation.hardwareSerialNumber());
 		config.setHardwareVersionNumber(annotation.hardwareVersionNumber());
-		config.setProductName(
-				annotation.productName().equals("") ? className : annotation.productName());
+		config.setProductName(annotation.productName().equals("") ? className : annotation.productName());
 		config.setProductOrderNumber(annotation.productOrderNumber());
 
 		// Look for fields annotated with @KnxDeviceParameter
