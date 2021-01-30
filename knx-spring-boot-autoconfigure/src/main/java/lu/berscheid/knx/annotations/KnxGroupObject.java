@@ -12,7 +12,12 @@ import java.lang.annotation.Target;
 @Documented
 @Inherited
 public @interface KnxGroupObject {
-	String text() default "Group Object";
+
+	String text() default "";
+
+	String functionText() default "";
+	
+	String datapointType() default "";
 
 	int sizeInBits() default 8;
 
@@ -20,15 +25,19 @@ public @interface KnxGroupObject {
 
 	long maxInclusive() default 255;
 
-	boolean communication() default true;
-
-	boolean read() default true;
-
-	boolean write() default false;
-
-	boolean transmit() default true;
-
-	boolean update() default false;
+	Flag[] flags() default { Flag.C };
 
 	String[] groupAddresses() default {};
+
+	String updateValueCallback() default "";
+
+	String readValueCallback() default "";
+
+	public enum Flag {
+		C, // Communication
+		R, // Read - object reacts to GroupValueRead and sends GroupValueResponse
+		W, // Write - object reacts to GroupValueWrite
+		T, // Transmit - object sends GroupValueWrite
+		U // Update - object sends GroupValueRead reacts to GroupValueResponse
+	}
 }

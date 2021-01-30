@@ -2,15 +2,13 @@ package lu.berscheid.knx.model;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import lombok.Data;
 
 @Data
 public class KnxDeviceConfig {
+
 	private String individualAddress;
 	private String manufacturerRefId = "M-00FA"; // KNX Association
 	private String applicationName;
@@ -23,9 +21,11 @@ public class KnxDeviceConfig {
 	private String productOrderNumber = "O12345";
 
 	private List<KnxParameterConfig> parameters = new ArrayList<KnxParameterConfig>();
-	private Map<String, KnxGroupObjectConfig> groupObjectMap = new HashMap<String, KnxGroupObjectConfig>();
+	private List<KnxGroupObjectConfig> groupObjects = new ArrayList<KnxGroupObjectConfig>();
 
 	private Method postStartMethod;
+	private Method postRestartMethod;
+	private Method preShutdownMethod;
 	Object deviceInstance;
 
 	public void addParameter(KnxParameterConfig parameter) {
@@ -33,14 +33,13 @@ public class KnxDeviceConfig {
 	}
 
 	public void addGroupObject(KnxGroupObjectConfig groupObject) {
-		this.groupObjectMap.put(groupObject.getName(), groupObject);
-	}
-
-	public Collection<KnxGroupObjectConfig> getGroupObjects() {
-		return this.groupObjectMap.values();
+		this.groupObjects.add(groupObject);
 	}
 
 	public KnxGroupObjectConfig getGroupObject(String name) {
-		return this.groupObjectMap.get(name);
+		for (KnxGroupObjectConfig config : this.groupObjects) {
+			if (config.getName().equals(name)) return config;
+		}
+		return null;
 	}
 }

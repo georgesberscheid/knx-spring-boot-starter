@@ -1,0 +1,53 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<artifactId>knx-device-utils</artifactId>
+
+	<properties>
+		<java.version>11</java.version>
+		<calimero.version>2.5-SNAPSHOT</calimero.version>
+	</properties>
+
+	<parent>
+		<groupId>lu.berscheid.knx</groupId>
+		<artifactId>knx-spring-boot-parent</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+
+	<dependencies>
+		<dependency>
+			<groupId>lu.berscheid.knx</groupId>
+			<artifactId>knx-device-model</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.github.calimero</groupId>
+			<artifactId>calimero-core</artifactId>
+			<version>${calimero.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.github.calimero</groupId>
+			<artifactId>calimero-device</artifactId>
+			<version>${calimero.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+	</dependencies>
+	<repositories>
+		<repository>
+			<id>snapshots</id>
+			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+				<updatePolicy>daily</updatePolicy>
+			</snapshots>
+		</repository>
+	</repositories>
+</project>

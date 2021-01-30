@@ -1,28 +1,18 @@
 package lu.berscheid.knx;
 
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Date;
 
 import lombok.extern.slf4j.Slf4j;
 import lu.berscheid.knx.model.KnxDeviceConfig;
 import lu.berscheid.knx.model.KnxException;
 import lu.berscheid.knx.model.KnxGroupObjectConfig;
+import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.DeviceDescriptor;
-import tuwien.auto.calimero.GroupAddress;
+import tuwien.auto.calimero.DeviceDescriptor.DD0;
 import tuwien.auto.calimero.KNXException;
-import tuwien.auto.calimero.datapoint.Datapoint;
-import tuwien.auto.calimero.datapoint.StateDP;
 import tuwien.auto.calimero.device.BaseKnxDevice;
-import tuwien.auto.calimero.device.KnxDevice;
-import tuwien.auto.calimero.device.ios.InterfaceObject;
-import tuwien.auto.calimero.dptxlator.DPT;
-import tuwien.auto.calimero.dptxlator.DPTXlator4ByteFloat;
-import tuwien.auto.calimero.dptxlator.DPTXlator4ByteSigned;
-import tuwien.auto.calimero.dptxlator.DPTXlator64BitSigned;
-import tuwien.auto.calimero.dptxlator.DPTXlatorBoolean;
-import tuwien.auto.calimero.dptxlator.DPTXlatorDateTime;
-import tuwien.auto.calimero.dptxlator.DPTXlatorString;
-import tuwien.auto.calimero.mgmt.PropertyAccess.PID;
 
 @Slf4j
 public class KnxDeviceManager {
@@ -53,93 +43,96 @@ public class KnxDeviceManager {
 		// Inject group objects
 		for (KnxGroupObjectConfig groupObject : deviceConfig.getGroupObjects()) {
 			try {
-				GroupObjectImpl groupObjectImpl = new GroupObjectImpl();
-				groupObjectImpl.setKnxLink(knxLink);
-				groupObjectImpl.setGroupAddresses(groupObject.getGroupAddresses());
+				GroupObjectImpl groupObjectImpl = new GroupObjectImpl(knxLink,
+						groupObject.getGroupAddresses(), groupObject);
 				groupObject.getField().setAccessible(true);
 				groupObject.getField().set(deviceConfig.getDeviceInstance(), groupObjectImpl);
+				groupObject.setGroupObjectImpl(groupObjectImpl);
 			} catch (IllegalArgumentException | IllegalAccessException e) {
-				log.error("Unable to assign group object instance to " + groupObject.getField().getName()
-						+ ". Group Object is being ignored.", e);
+				log.error("Unable to assign group object instance to "
+						+ groupObject.getField().getName() + ". Group Object is being ignored.", e);
 			}
 		}
 
 		// Create a BaseKnxDevice and start the runtime
+		BaseKnxDevice device;
 		try {
-			startDeviceRuntime(deviceConfig);
+			device = startDeviceRuntime(deviceConfig);
 		} catch (KNXException e) {
 			log.error("Unable to start KNX device runtime: " + e.getMessage(), e);
 			throw new KnxException("Unable to start KNX device runtime: " + e.getMessage(), e);
 		}
 
-		// Run init method
+		// Run post start method
 		if (deviceConfig.getPostStartMethod() != null) {
 			try {
 				deviceConfig.getPostStartMethod().setAccessible(true);
 				deviceConfig.getPostStartMethod().invoke(deviceConfig.getDeviceInstance());
 			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-				log.error("Unable to call init method " + deviceConfig.getPostStartMethod().getName()
-						+ ". Group Object is being ignored.", e);
+				log.error("Unable to call post start method "
+						+ deviceConfig.getPostStartMethod().getName() + ".", e);
 			}
 		}
 
 		// Leave the main thread alive while the listeners process messages
 		while (true) {
 			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				log.info("Main thread got interrupted, exiting.");
+				if (System.in.read() != 0) break;
+			} catch (IOException e) {
+				log.info("Unable to read from System.in, exiting.");
 			}
 		}
+
+		// Run pre shutdown method
+		if (deviceConfig.getPreShutdownMethod() != null) {
+			try {
+				deviceConfig.getPreShutdownMethod().setAccessible(true);
+				deviceConfig.getPreShutdownMethod().invoke(deviceConfig.getDeviceInstance());
+			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+				log.error("Unable to call pre shutdown method "
+						+ deviceConfig.getPreShutdownMethod().getName() + ".", e);
+			}
+		}
+
+		// Close the device and save the interface objects and memory
+		device.close();
 	}
 
-	private void startDeviceRuntime(KnxDeviceConfig deviceConfig) throws KNXException {
+	private BaseKnxDevice startDeviceRuntime(KnxDeviceConfig deviceConfig) throws KNXException {
 		KnxDeviceLogic logic = new KnxDeviceLogic(deviceConfig);
 
-		KnxDevice device = new BaseKnxDevice(deviceConfig.getApplicationName(), logic);
+		// Load the previously stored device memory dump. If it exists, sync the runtime from the
+		// loaded memory once the device is started.
+		String iosFilename = deviceConfig.getHardwareName().replaceAll(" ", "_");
+		String iosFilePath = System.getProperty("user.home") + "\\.knx\\"
+				+ deviceConfig.getHardwareName() + "\\";
+		File deviceOutputFile = new File(iosFilePath + iosFilename + ".xml");
+		boolean syncRuntime = deviceOutputFile.exists();
+		if (!syncRuntime) {
+			// Create directories if they don't exist yet
+			new File(iosFilePath).mkdirs();
+		}
 
-		// Set the manufacturer ID provided by the device configuration
+		BaseKnxDevice device = new BaseKnxDevice(deviceConfig.getApplicationName(), logic,
+				deviceOutputFile.toURI(), new char[] { 0 });
+		DeviceDescriptor deviceDescriptor = DD0.TYPE_07B0;
 		int manufacturerId = Integer.parseInt(deviceConfig.getManufacturerRefId().substring(2), 16);
-		device.getInterfaceObjectServer().setProperty(InterfaceObject.DEVICE_OBJECT, PID.MANUFACTURER_ID, 1, 1,
-				new byte[] { (byte) (manufacturerId >> 8), (byte) manufacturerId });
-
-		// Set the device descriptor to 0x07B0 = mask version of the application program of the generated .knxprod file.
-		device.getInterfaceObjectServer().setProperty(InterfaceObject.DEVICE_OBJECT, PID.DEVICE_DESCRIPTOR, 1, 1,
-				DeviceDescriptor.DD0.TYPE_07B0.toByteArray());
+		// TODO: get serialNumber, hardwareType, programVersion from deviceConfig
+		final byte[] serialNumber = DataUnitBuilder.fromHex("000a1c112913"); // 6 bytes
+		final byte[] hardwareType = DataUnitBuilder.fromHex("000000000223"); // 6 bytes
+		final byte[] programVersion = new byte[] { 0, 4, 0, 0, 0 }; // 5 bytes
+		// a valid FDSK is only required for secure device download
+		final byte[] fdsk = DataUnitBuilder.fromHex("35cb5a25771daf18d52d9ef7e39a2799"); // 16 bytes
+		device.identification(deviceDescriptor, manufacturerId, serialNumber, hardwareType,
+				programVersion, fdsk);
 
 		logic.setDevice(device);
 		logic.setProgrammingMode(true);
-
-		// Register all group object datapoints
-		for (KnxGroupObjectConfig groupObjectConfig : deviceConfig.getGroupObjects()) {
-			// TODO: fine grained type management
-			DPT datapointType = null;
-			if (groupObjectConfig.getType().equals(Boolean.class)) {
-				datapointType = DPTXlatorBoolean.DPT_SWITCH;
-			} else if (groupObjectConfig.getType().equals(Short.class)) {
-				datapointType = DPTXlator4ByteSigned.DPT_COUNT;
-			} else if (groupObjectConfig.getType().equals(Integer.class)) {
-				datapointType = DPTXlator64BitSigned.DPT_ACTIVE_ENERGY;
-			} else if (groupObjectConfig.getType().equals(Float.class)) {
-				datapointType = DPTXlator4ByteFloat.DPT_ABSOLUTE_TEMPERATURE;
-			} else if (groupObjectConfig.getType().equals(String.class)) {
-				datapointType = DPTXlatorString.DPT_STRING_8859_1;
-			} else if (groupObjectConfig.getType().equals(Date.class)) {
-				datapointType = DPTXlatorDateTime.DPT_DATE_TIME;
-			} else {
-				log.error("Unsupported datapoint type for group object " + groupObjectConfig.getName() + ": "
-						+ groupObjectConfig.getType());
-				continue;
-			}
-
-			for (String groupAddress : groupObjectConfig.getGroupAddresses()) {
-				Datapoint datapoint = new StateDP(new GroupAddress(groupAddress),
-						groupObjectConfig.getName() + ": " + groupAddress, 0, datapointType.getID());
-				log.debug("Registering group address " + groupAddress);
-				logic.getDatapointModel().add(datapoint);
-			}
-
-			device.setDeviceLink(knxLink.getLink());
+		logic.registerGroupObjects();
+		if (syncRuntime) {
+			logic.syncRuntimeFromMemory();
 		}
+		device.setDeviceLink(knxLink.getLink());
+		return device;
 	}
 }

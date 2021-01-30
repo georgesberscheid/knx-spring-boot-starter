@@ -15,9 +15,14 @@ import org.springframework.beans.factory.annotation.Qualifier;
 @Inherited
 @Qualifier("KnxDevice")
 public @interface KnxDevice {
-	String individualAddress() default "${knx.individualAddress}";
 
-	String manufacturerRefId() default "${knx.manufacturerRefId}";
+	// Defines the individual address of the device. Can be overwritten during programming.
+	// Defaults to 0.0.1
+	String individualAddress() default "${knx.individualAddress:0.0.1}";
+
+	// Defines the manufacturer reference for this device.
+	// Defaults to 00FA (KNX association)
+	String manufacturerRefId() default "${knx.manufacturerRefId:M-00FA}";
 
 	String applicationName() default "";
 

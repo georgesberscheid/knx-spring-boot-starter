@@ -1,5 +1,6 @@
 package lu.berscheid.knx.generator.model;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.xml.bind.annotation.XmlAccessType;
@@ -22,7 +23,7 @@ public class CatalogSectionT {
 	@XmlElement(name = "CatalogSection")
 	protected List<CatalogSectionT> catalogSection;
 	@XmlElement(name = "CatalogItem")
-	protected List<CatalogSectionT.CatalogItem> catalogItem;
+	protected List<CatalogSectionT.CatalogItem> catalogItem = new ArrayList<CatalogSectionT.CatalogItem>();
 	@XmlAttribute(name = "Id", required = true)
 	@XmlJavaTypeAdapter(CollapsedStringAdapter.class)
 	@XmlID

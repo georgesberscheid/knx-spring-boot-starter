@@ -1,5 +1,9 @@
 package lu.berscheid.knx.generator;
 
+import static lu.berscheid.knx.utils.KnxTypeUtils.isFloat;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isInteger;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isString;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -46,13 +50,16 @@ import lu.berscheid.knx.generator.model.MemoryParameterT;
 import lu.berscheid.knx.generator.model.ParameterRefRefT;
 import lu.berscheid.knx.generator.model.ParameterRefT;
 import lu.berscheid.knx.generator.model.ParameterTypeT;
+import lu.berscheid.knx.generator.model.ParameterTypeT.TypeFloat;
 import lu.berscheid.knx.generator.model.ParameterTypeT.TypeNumber;
+import lu.berscheid.knx.generator.model.ParameterTypeT.TypeText;
 import lu.berscheid.knx.generator.model.RegistrationInfoT;
 import lu.berscheid.knx.generator.model.RegistrationStatusT;
 import lu.berscheid.knx.model.KnxDeviceConfig;
 import lu.berscheid.knx.model.KnxGroupObjectConfig;
 import lu.berscheid.knx.model.KnxParameterConfig;
 import lu.berscheid.knx.model.KnxParameterTypeConfig;
+import lu.berscheid.knx.utils.KnxTypeUtils;
 
 @Slf4j
 @AllArgsConstructor
@@ -121,7 +128,7 @@ public class KnxProductGenerator {
 
 		ComObjectParameterBlockT parameterBlock = new ComObjectParameterBlockT();
 		parameterBlock.setName("ParameterPage");
-		parameterBlock.setText("Common Parameters");
+		parameterBlock.setText("Parameters");
 		parameterBlock.setId(String.format("%s_PB-1", applicationProgram.getId()));
 
 		ChannelIndependentBlockT channel = new ChannelIndependentBlockT();
@@ -135,8 +142,8 @@ public class KnxProductGenerator {
 		codeSegment.setName("Parameters");
 		codeSegment.setOffset(0L);
 		codeSegment.setLoadStateMachine((short) 4);
-		codeSegment.setId(String.format("%s_RS-%02d-%05d", applicationProgram.getId(), codeSegment.getLoadStateMachine(),
-				codeSegment.getOffset()));
+		codeSegment.setId(String.format("%s_RS-%02d-%05d", applicationProgram.getId(),
+				codeSegment.getLoadStateMachine(), codeSegment.getOffset()));
 		code.getRelativeSegment().add(codeSegment);
 
 		ApplicationProgramStaticT.ParameterTypes parameterTypes = new ApplicationProgramStaticT.ParameterTypes();
@@ -155,20 +162,31 @@ public class KnxProductGenerator {
 			ParameterTypeT parameterType = new ParameterTypeT();
 			parameterType.setName(String.format("PT-%d", count));
 			parameterType.setId(String.format("%s_PT-%d", applicationProgram.getId(), count));
-			// TODO handle types correctly
-			TypeNumber typeNumber = new TypeNumber();
-			typeNumber.setSizeInBit(typeConfig.getSizeInBit());
-			typeNumber.setType("signedInt");
-			typeNumber.setMinInclusive(typeConfig.getMinInclusive());
-			typeNumber.setMaxInclusive(typeConfig.getMaxInclusive());
-			parameterType.setTypeNumber(typeNumber);
+			// TODO deal with all parameter types
+			if (isInteger(parameterConfig.getType())) {
+				TypeNumber typeNumber = new TypeNumber();
+				typeNumber.setSizeInBit(typeConfig.getSizeInBit());
+				typeNumber.setType("signedInt");
+				typeNumber.setMinInclusive(typeConfig.getMinInclusive());
+				typeNumber.setMaxInclusive(typeConfig.getMaxInclusive());
+				parameterType.setTypeNumber(typeNumber);
+			} else if (isFloat(parameterConfig.getType())) {
+				TypeFloat typeFloat = new TypeFloat();
+				typeFloat.setMinInclusive(typeConfig.getMinInclusive());
+				typeFloat.setMaxInclusive(typeConfig.getMaxInclusive());
+				parameterType.setTypeFloat(typeFloat);
+			} else if (isString(parameterConfig.getType())) {
+				TypeText typeText = new TypeText();
+				typeText.setSizeInBit(typeConfig.getSizeInBit());
+				parameterType.setTypeText(typeText);
+			}
 			parameterTypes.getParameterType().add(parameterType);
 
 			// Create parameters
 			ParameterT parameter = new ParameterT();
 			parameter.setName(parameterConfig.getName());
 			parameter.setText(parameterConfig.getText());
-			parameter.setValue(parameterConfig.getValue());
+			parameter.setValue(parameterConfig.getValue().toString());
 			parameter.setParameterType(parameterType.getId());
 			MemoryParameterT memoryParameter = new MemoryParameterT();
 			memoryParameter.setCodeSegment(codeSegment.getId());
@@ -205,21 +223,25 @@ public class KnxProductGenerator {
 		ComObjectTable comObjectTable = new ApplicationProgramStaticT.ComObjectTable();
 		ComObjectRefs comObjectRefs = new ApplicationProgramStaticT.ComObjectRefs();
 		count = 1;
-		for (KnxGroupObjectConfig comObjectConfig : device.getGroupObjects()) {
+		for (KnxGroupObjectConfig groupObjectConfig : device.getGroupObjects()) {
 			ComObjectT comObject = new ComObjectT();
-			comObject.setName(comObjectConfig.getName());
-			comObject.setText(comObjectConfig.getText());
-			comObject.setFunctionText(comObjectConfig.getFunctionText());
-			comObject.setObjectSize(comObjectConfig.getObjectSize());
-			comObject.setCommunicationFlag(comObjectConfig.isCommunicationFlag() ? EnableT.ENABLED : EnableT.DISABLED);
-			comObject.setReadFlag(comObjectConfig.isReadFlag() ? EnableT.ENABLED : EnableT.DISABLED);
-			comObject.setWriteFlag(comObjectConfig.isWriteFlag() ? EnableT.ENABLED : EnableT.DISABLED);
-			comObject.setTransmitFlag(comObjectConfig.isTransmitFlag() ? EnableT.ENABLED : EnableT.DISABLED);
-			comObject.setUpdateFlag(comObjectConfig.isUpdateFlag() ? EnableT.ENABLED : EnableT.DISABLED);
+			comObject.setName(groupObjectConfig.getName());
+			comObject.setText(groupObjectConfig.getText());
+			comObject.setFunctionText(groupObjectConfig.getFunctionText());
+			comObject.setObjectSize(groupObjectConfig.getObjectSize());
+			comObject.getDatapointType().add(
+					KnxTypeUtils.convertDatapointTypeToKnxProd(groupObjectConfig.getDataPointType()));
+			comObject.setCommunication(groupObjectConfig.isCommunicationFlag());
+			comObject.setRead(groupObjectConfig.isReadFlag());
+			comObject.setWrite(groupObjectConfig.isWriteFlag());
+			comObject.setTransmit(groupObjectConfig.isTransmitFlag());
+			comObject.setUpdate(groupObjectConfig.isUpdateFlag());
 			comObject.setNumber(count++);
-			comObject.setPriority(ComObjectPriorityT.valueOf(comObjectConfig.getPriority().toString()));
+			comObject
+					.setPriority(ComObjectPriorityT.valueOf(groupObjectConfig.getPriority().toString()));
 			comObject.setReadOnInitFlag(EnableT.DISABLED);
-			comObject.setId(String.format("%s_O-%d", applicationProgram.getId(), comObject.getNumber()));
+			comObject
+					.setId(String.format("%s_O-%d", applicationProgram.getId(), comObject.getNumber()));
 			comObjectTable.getComObject().add(comObject);
 
 			ComObjectRefT comObjectRef = new ComObjectRefT();
@@ -243,8 +265,8 @@ public class KnxProductGenerator {
 		hardware.setBusCurrent(null); // IP
 		hardware.setSerialNumber(device.getHardwareSerialNumber());
 		hardware.setVersionNumber(device.getHardwareVersionNumber());
-		hardware.setId(String.format("%s_H-%s-%d", manufacturer.getRefId(), hardware.getSerialNumber(),
-				hardware.getVersionNumber()));
+		hardware.setId(String.format("%s_H-%s-%d", manufacturer.getRefId(),
+				hardware.getSerialNumber(), hardware.getVersionNumber()));
 
 		product.setText(device.getProductName());
 		product.setRailMounted(false);
@@ -259,8 +281,8 @@ public class KnxProductGenerator {
 		hardwareProgram.getMediumTypes().add("MT-5"); // Medium type IP
 		RegistrationInfoT hardwareRegistrationInfo = new RegistrationInfoT();
 		hardwareRegistrationInfo.setRegistrationStatus(RegistrationStatusT.REGISTERED);
-		hardwareRegistrationInfo
-				.setRegistrationNumber("0001/" + hardware.getVersionNumber() + applicationProgram.getApplicationVersion());
+		hardwareRegistrationInfo.setRegistrationNumber(
+				"0001/" + hardware.getVersionNumber() + applicationProgram.getApplicationVersion());
 		hardwareProgram.setRegistrationInfo(hardwareRegistrationInfo);
 		hardwareProgram.setId(String.format("%s_HP-%04d-%02d-0000", hardware.getId(),
 				applicationProgram.getApplicationNumber(), applicationProgram.getApplicationVersion()));
@@ -268,15 +290,16 @@ public class KnxProductGenerator {
 		catalogSection.setName("Devices");
 		catalogSection.setNumber("1");
 		catalogSection.setDefaultLanguage("en");
-		catalogSection.setId(String.format("%s_CS-%s", manufacturer.getRefId(), catalogSection.getNumber()));
+		catalogSection
+				.setId(String.format("%s_CS-%s", manufacturer.getRefId(), catalogSection.getNumber()));
 
 		catalogItem.setName(device.getProductName());
 		catalogItem.setNumber(1);
 		catalogItem.setProductRefId(product.getId());
 		catalogItem.setHardware2ProgramRefId(hardwareProgram.getId());
 		catalogItem.setDefaultLanguage("en");
-		catalogItem.setId(
-				String.format("%s_CI-%s-%d", hardwareProgram.getId(), product.getOrderNumber(), catalogItem.getNumber()));
+		catalogItem.setId(String.format("%s_CI-%s-%d", hardwareProgram.getId(),
+				product.getOrderNumber(), catalogItem.getNumber()));
 
 		// Create load procedures
 		LoadProcedure loadProcedure1 = new LoadProcedure();
@@ -315,22 +338,24 @@ public class KnxProductGenerator {
 			Unmarshaller unmarshaller = context.createUnmarshaller();
 			KNX oldKnx = (KNX) unmarshaller.unmarshal(knxProductFile);
 			if (oldKnx.equals(knx)) {
-				log.info("Product file has remained unchanged. Doing nothing. If you still want to regenerate the "
-						+ ".knxprod file, consider deleting " + knxProductDirectory + knxProductFilename);
+				log.info(
+						"Product file has remained unchanged. Doing nothing. If you still want to regenerate the "
+								+ ".knxprod file, consider deleting " + knxProductDirectory
+								+ knxProductFilename);
 				return;
 			} else {
-				int oldApplicationNumber = oldKnx.getManufacturerData().getManufacturer().get(0).getApplicationPrograms()
-						.getApplicationProgram().get(0).getApplicationNumber();
-				int newApplicationNumber = knx.getManufacturerData().getManufacturer().get(0).getApplicationPrograms()
-						.getApplicationProgram().get(0).getApplicationNumber();
+				int oldApplicationNumber = oldKnx.getManufacturerData().getManufacturer().get(0)
+						.getApplicationPrograms().getApplicationProgram().get(0).getApplicationNumber();
+				int newApplicationNumber = knx.getManufacturerData().getManufacturer().get(0)
+						.getApplicationPrograms().getApplicationProgram().get(0).getApplicationNumber();
 				if (oldApplicationNumber == newApplicationNumber) {
 					// If both application numbers are the same, increment the new one
-					knx.getManufacturerData().getManufacturer().get(0).getApplicationPrograms().getApplicationProgram()
-							.get(0).setApplicationNumber(newApplicationNumber + 1);
+					knx.getManufacturerData().getManufacturer().get(0).getApplicationPrograms()
+							.getApplicationProgram().get(0).setApplicationNumber(newApplicationNumber + 1);
 				}
 				// Create a backup of the old file
-				FileUtils.moveFile(knxProductFile,
-						new File(knxProductDirectory + hardware.getId() + "_v" + oldApplicationNumber + ".xml"));
+				FileUtils.moveFile(knxProductFile, new File(
+						knxProductDirectory + hardware.getId() + "_v" + oldApplicationNumber + ".xml"));
 			}
 		}
 
@@ -350,7 +375,8 @@ public class KnxProductGenerator {
 			// file that can be imported into ETS5.
 			signProductFile(knxProductDirectory, hardware.getId());
 		} catch (Exception e) {
-			log.error("Unable to create product XML file " + knxProductDirectory + knxProductFilename, e);
+			log.error("Unable to create product XML file " + knxProductDirectory + knxProductFilename,
+					e);
 		}
 	}
 
@@ -371,7 +397,8 @@ public class KnxProductGenerator {
 			}
 
 			if (etsDirectory == null) {
-				log.error("Unable to find an ETS5 installation in " + etsDirs + ". Cannot sign the product file.");
+				log.error("Unable to find an ETS5 installation in " + etsDirs
+						+ ". Cannot sign the product file.");
 				return;
 			}
 
@@ -382,8 +409,8 @@ public class KnxProductGenerator {
 			String[] filesToCopy = { "KnxProdSigner.exe", "KnxProdSigner.exe.config" };
 			try {
 				for (String file : filesToCopy) {
-					Files.copy(KnxProductGenerator.class.getResourceAsStream("/bin/" + file), Paths.get(tempFolder + file),
-							StandardCopyOption.REPLACE_EXISTING);
+					Files.copy(KnxProductGenerator.class.getResourceAsStream("/bin/" + file),
+							Paths.get(tempFolder + file), StandardCopyOption.REPLACE_EXISTING);
 				}
 			} catch (IOException e) {
 				log.error("Unable to unpack native signing application to " + tempFolder, e);
@@ -394,8 +421,8 @@ public class KnxProductGenerator {
 			try {
 				String inputFile = knxProductDirectory + knxProductName + ".xml";
 				String outputFile = knxProductDirectory + knxProductName + ".knxprod";
-				log.debug(
-						"Calling " + tempFolder + "\\KnxProdSigner.exe " + etsDirectory + " " + outputFile + " " + inputFile);
+				log.debug("Calling " + tempFolder + "\\KnxProdSigner.exe " + etsDirectory + " "
+						+ outputFile + " " + inputFile);
 				Process process = new ProcessBuilder().directory(new File(tempFolder))
 						.command(tempFolder + "\\KnxProdSigner.exe", etsDirectory, outputFile, inputFile)
 						.redirectErrorStream(true).inheritIO().start();
@@ -403,8 +430,8 @@ public class KnxProductGenerator {
 					if (process.exitValue() == 0) {
 						log.info("KNX Product file written to " + outputFile);
 					} else {
-						log.error("Unable to write the KNX output file to " + outputFile + ". Process exited with error "
-								+ process.exitValue());
+						log.error("Unable to write the KNX output file to " + outputFile
+								+ ". Process exited with error " + process.exitValue());
 					}
 				}
 			} catch (IOException | InterruptedException e) {
@@ -417,8 +444,9 @@ public class KnxProductGenerator {
 				}
 			}
 		} else {
-			log.error("Signing a product file needs a proper installation of ETS5 to be found. ETS5 is not available on "
-					+ System.getProperty("os.name"));
+			log.error(
+					"Signing a product file needs a proper installation of ETS5 to be found. ETS5 is not available on "
+							+ System.getProperty("os.name"));
 		}
 	}
 }

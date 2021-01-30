@@ -1,5 +1,9 @@
 package lu.berscheid.knx;
 
+import static lu.berscheid.knx.utils.KnxTypeUtils.isInteger;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isLong;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isString;
+
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -7,7 +11,9 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
@@ -24,9 +30,12 @@ import lombok.extern.slf4j.Slf4j;
 import lu.berscheid.knx.annotations.KnxDevice;
 import lu.berscheid.knx.annotations.KnxDeviceParameter;
 import lu.berscheid.knx.annotations.KnxGroupObject;
+import lu.berscheid.knx.annotations.KnxGroupObject.Flag;
+import lu.berscheid.knx.annotations.KnxPostRestart;
 import lu.berscheid.knx.annotations.KnxPostStart;
-import lu.berscheid.knx.annotations.KnxRequestDatapointMethod;
-import lu.berscheid.knx.annotations.KnxUpdateDatapointMethod;
+import lu.berscheid.knx.annotations.KnxPreShutdown;
+import lu.berscheid.knx.annotations.KnxRequestDatapoint;
+import lu.berscheid.knx.annotations.KnxUpdateDatapoint;
 import lu.berscheid.knx.commandline.KnxCommandlineParser;
 import lu.berscheid.knx.commandline.KnxRunnable;
 import lu.berscheid.knx.model.GroupObject;
@@ -35,11 +44,13 @@ import lu.berscheid.knx.model.KnxGroupObjectConfig;
 import lu.berscheid.knx.model.KnxGroupObjectConfig.Priority;
 import lu.berscheid.knx.model.KnxParameterConfig;
 import lu.berscheid.knx.model.KnxParameterTypeConfig;
+import lu.berscheid.knx.utils.KnxTypeUtils;
 
 @Slf4j
 @Configuration
 @ConditionalOnClass(KnxLink.class)
-public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcessor, BeanFactoryAware {
+public class KnxAutoConfiguration
+		implements CommandLineRunner, BeanPostProcessor, BeanFactoryAware {
 
 	private List<KnxDeviceConfig> knxDeviceConfigs = new ArrayList<KnxDeviceConfig>();
 	private ConfigurableBeanFactory beanFactory;
@@ -55,7 +66,8 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 		}
 	}
 
-	public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+	public Object postProcessBeforeInitialization(Object bean, String beanName)
+			throws BeansException {
 		if (!bean.getClass().isAnnotationPresent(KnxDevice.class)) {
 			return bean;
 		}
@@ -87,13 +99,19 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 					+ ". Needs to start with 'M-' followed by 2 bytes integer hex representation (e.g. M-00FA).");
 			return bean;
 		}
-		config.setApplicationName(annotation.applicationName().equals("") ? className : annotation.applicationName());
+		config.setApplicationName(
+				annotation.applicationName().equals("") ? className : annotation.applicationName());
 		config.setApplicationNumber(annotation.applicationNumber());
 		config.setApplicationVersion(annotation.applicationVersion());
-		config.setHardwareName(annotation.hardwareName().equals("") ? className : annotation.hardwareName());
-		config.setHardwareSerialNumber(annotation.hardwareSerialNumber());
+		config.setHardwareName(
+				annotation.hardwareName().equals("") ? className : annotation.hardwareName());
+		// Generating a the .knxprod file will fail if there are special chars
+		String hardwareSerialNumber = annotation.hardwareSerialNumber() == null ? null
+				: annotation.hardwareSerialNumber().replaceAll("[^a-zA-Z0-9]", "");
+		config.setHardwareSerialNumber(hardwareSerialNumber);
 		config.setHardwareVersionNumber(annotation.hardwareVersionNumber());
-		config.setProductName(annotation.productName().equals("") ? className : annotation.productName());
+		config.setProductName(
+				annotation.productName().equals("") ? className : annotation.productName());
 		config.setProductOrderNumber(annotation.productOrderNumber());
 
 		// Look for fields annotated with @KnxDeviceParameter
@@ -101,18 +119,32 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 				field -> matchFieldWithAnnotation(field, KnxDeviceParameter.class));
 
 		// Look for fields annotated with @KnxGroupObject
-		ReflectionUtils.doWithFields(bean.getClass(), field -> processGroupObjects(bean, field, config),
+		ReflectionUtils.doWithFields(bean.getClass(),
+				field -> processGroupObjects(bean, field, config),
 				field -> matchFieldWithAnnotation(field, KnxGroupObject.class));
 
 		// Look for update and request datapoint methods
-		ReflectionUtils.doWithMethods(bean.getClass(), method -> processUpdateDatapointMethod(bean, method, config),
-				method -> matchMethodWithAnnotation(method, KnxUpdateDatapointMethod.class));
-		ReflectionUtils.doWithMethods(bean.getClass(), method -> processRequestDatapointMethod(bean, method, config),
-				method -> matchMethodWithAnnotation(method, KnxRequestDatapointMethod.class));
+		ReflectionUtils.doWithMethods(bean.getClass(),
+				method -> processUpdateDatapointMethod(bean, method, config),
+				method -> matchMethodWithAnnotation(method, KnxUpdateDatapoint.class));
+		ReflectionUtils.doWithMethods(bean.getClass(),
+				method -> processRequestDatapointMethod(bean, method, config),
+				method -> matchMethodWithAnnotation(method, KnxRequestDatapoint.class));
 
 		// Look for a KNX post start method
-		ReflectionUtils.doWithMethods(bean.getClass(), method -> processPostStartMethod(bean, method, config),
+		ReflectionUtils.doWithMethods(bean.getClass(),
+				method -> processPostStartMethod(bean, method, config),
 				method -> matchMethodWithAnnotation(method, KnxPostStart.class));
+
+		// Look for a KNX post restart method
+		ReflectionUtils.doWithMethods(bean.getClass(),
+				method -> processPostRestartMethod(bean, method, config),
+				method -> matchMethodWithAnnotation(method, KnxPostRestart.class));
+
+		// Look for a KNX pre shutdown method
+		ReflectionUtils.doWithMethods(bean.getClass(),
+				method -> processPreShutdownMethod(bean, method, config),
+				method -> matchMethodWithAnnotation(method, KnxPreShutdown.class));
 
 		log.trace("Device config: " + config.toString());
 		knxDeviceConfigs.add(config);
@@ -134,6 +166,7 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 		KnxParameterConfig config = new KnxParameterConfig();
 		config.setName(field.getName());
 		config.setText(annotation.text().equals("") ? field.getName() : annotation.text());
+		config.setField(field);
 		try {
 			// Try and get the default value
 			field.setAccessible(true);
@@ -142,8 +175,8 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 				config.setValue(value.toString());
 			}
 		} catch (IllegalArgumentException | IllegalAccessException e) {
-			log.warn("Unable to get default value from device " + device.getClass() + " for field " + field.getName()
-					+ ": " + e.getMessage());
+			log.warn("Unable to get default value from device " + device.getClass() + " for field "
+					+ field.getName() + ": " + e.getMessage());
 		}
 
 		KnxParameterTypeConfig typeConfig = new KnxParameterTypeConfig();
@@ -152,16 +185,17 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 		// Check for supported parameter types
 		long minInclusive = annotation.minInclusive();
 		long maxInclusive = annotation.maxInclusive();
-		if (field.getType() == int.class) {
+		if (isInteger(typeConfig.getType())) {
 			typeConfig.setMinInclusive(minInclusive == -1 ? Integer.MIN_VALUE : minInclusive);
 			typeConfig.setMaxInclusive(maxInclusive == -1 ? Integer.MAX_VALUE : maxInclusive);
 			typeConfig.setSizeInBit(32);
-		} else if (field.getType() == long.class) {
+		} else if (isLong(typeConfig.getType())) {
 			typeConfig.setMinInclusive(minInclusive == -1 ? Long.MIN_VALUE : minInclusive);
 			typeConfig.setMaxInclusive(maxInclusive == -1 ? Long.MAX_VALUE : maxInclusive);
 			typeConfig.setSizeInBit(64);
-		} else if (field.getType() == String.class) {
-			typeConfig.setSizeInBit(50 * 8);
+		} else if (isString(typeConfig.getType())) {
+			// If the size wasn't defined, use a default value of 50 bytes
+			typeConfig.setSizeInBit(annotation.sizeInBit() == 0 ? 50 * 8 : annotation.sizeInBit());
 		} else {
 			throw new RuntimeException("Parameter type " + field.getType() + " is not supported.");
 		}
@@ -175,26 +209,45 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 		KnxGroupObject annotation = field.getAnnotation(KnxGroupObject.class);
 		KnxGroupObjectConfig config = new KnxGroupObjectConfig();
 
+		// Check that the type of the annotated field is GroupObject<>
 		Class<?> type = field.getType();
 		if (!type.equals(GroupObject.class)) {
-			log.error("@KnxGroupObject declared on field " + field.getName() + " with type " + field.getType()
-					+ ". You must use GroupObject<>. Group Object is being ignored.");
+			log.error("@KnxGroupObject declared on field " + field.getName() + " with type "
+					+ field.getType() + ". You must use GroupObject<>. Group Object is being ignored.");
 			return;
 		}
 
+		// Check the type of the parameterized field
 		Type genericType = field.getGenericType();
 		if (genericType instanceof ParameterizedType) {
 			ParameterizedType parameterizedType = (ParameterizedType) genericType;
 			Type[] typeArguments = parameterizedType.getActualTypeArguments();
 			if (typeArguments.length != 1) {
-				log.error("@KnxGroupObject type must be parameterized with exactly 1 parameter. @KnxGroupObject definition "
-						+ field.getName() + " has: " + typeArguments + ". Group Object is being ignored.");
+				log.error(
+						"@KnxGroupObject type must be parameterized with exactly 1 parameter. @KnxGroupObject definition "
+								+ field.getName() + " has: " + typeArguments
+								+ ". Group Object is being ignored.");
 				return;
 			}
 			if (typeArguments[0] instanceof Class<?>) {
 				config.setType((Class<?>) typeArguments[0]);
+				// Set the datapoint type
+				if (StringUtils.isEmpty(annotation.datapointType())) {
+					config.setDataPointType(KnxTypeUtils.getDefaultDatapointType(config.getType()));
+				} else {
+					if (KnxTypeUtils.isValidDatapointTypeForJavaType(annotation.datapointType(),
+							config.getType())) {
+						config.setDataPointType(annotation.datapointType());
+					} else {
+						log.error("The provided datapoint type " + annotation.datapointType()
+								+ " is invalid for the given defined Java type the group object has "
+								+ "been parameterized with: " + config.getType());
+						return;
+					}
+				}
 			} else {
-				log.error("Parameter of GroupObject " + field.getName() + " is not a raw type: " + typeArguments[0]);
+				log.error("Parameter of GroupObject " + field.getName() + " is not a raw type: "
+						+ typeArguments[0]);
 			}
 		} else {
 			log.error("@KnxGroupObject declared on non-parametrized field " + field.getName()
@@ -207,86 +260,170 @@ public class KnxAutoConfiguration implements CommandLineRunner, BeanPostProcesso
 		for (String groupAddress : annotation.groupAddresses()) {
 			config.getGroupAddresses().add(beanFactory.resolveEmbeddedValue(groupAddress));
 		}
-		config.setCommunicationFlag(annotation.communication());
-		config.setReadFlag(annotation.read());
-		config.setTransmitFlag(annotation.transmit());
-		config.setUpdateFlag(annotation.update());
-		config.setWriteFlag(annotation.write());
+
+		Set<Flag> flags = Set.of(annotation.flags());
+		config.setCommunicationFlag(flags.contains(Flag.C));
+		config.setReadFlag(flags.contains(Flag.R));
+		config.setTransmitFlag(flags.contains(Flag.T));
+		config.setUpdateFlag(flags.contains(Flag.U));
+		config.setWriteFlag(flags.contains(Flag.W));
 		config.setName(field.getName());
 		config.setText(annotation.text());
-		config.setFunctionText(annotation.text());
+		config.setFunctionText(
+				annotation.functionText() != null ? annotation.functionText() : annotation.text());
 		config.setSizeInBits(annotation.sizeInBits());
 		config.setPriority(Priority.LOW);
 		deviceConfig.addGroupObject(config);
 	}
 
-	private void processUpdateDatapointMethod(Object device, Method method, KnxDeviceConfig deviceConfig) {
-		KnxUpdateDatapointMethod annotation = method.getAnnotation(KnxUpdateDatapointMethod.class);
+	private void processUpdateDatapointMethod(Object device, Method method,
+			KnxDeviceConfig deviceConfig) {
+		KnxUpdateDatapoint annotation = method.getAnnotation(KnxUpdateDatapoint.class);
 		String groupObjectName = annotation.groupObjectName();
 		KnxGroupObjectConfig groupObjectConfig = deviceConfig.getGroupObject(groupObjectName);
 
 		// Check if we have a group object that matches this updateDatapoint method
 		if (groupObjectConfig == null) {
 			log.error("Unable to find a group object named " + groupObjectName + " on device "
-					+ deviceConfig.getApplicationName() + ". Skipping update datapoint method " + method.getName());
+					+ deviceConfig.getApplicationName() + ". Skipping update datapoint method "
+					+ method.getName());
 			return;
 		}
 
 		// Check if the method has a single parameter whose type matches the group object
-		if (method.getParameterCount() != 1 || !method.getParameters()[0].getType().equals(groupObjectConfig.getType())) {
+		if (method.getParameterCount() != 1
+				|| !method.getParameters()[0].getType().equals(groupObjectConfig.getType())) {
 			log.error("Update datapoint method for group object " + groupObjectName
 					+ " must have exactly one parameter of type " + groupObjectConfig.getType());
 			return;
 		}
 
-		log.debug("Found update datapoint method: " + method.getName() + " for group object " + groupObjectName);
+		log.debug("Found update datapoint method: " + method.getName() + " for group object "
+				+ groupObjectName);
+
+		// If a group object has an updateDatapointMethod, make sure the W flag is set
+		if (!groupObjectConfig.isWriteFlag()) {
+			log.info("Group object " + groupObjectConfig.getName()
+					+ " has an update datapoint method defined, but the write flag is not "
+					+ "enabled. Enabling now.");
+			groupObjectConfig.setWriteFlag(true);
+		}
+
 		groupObjectConfig.setUpdateDatapointMethod(method);
 	}
 
-	private void processRequestDatapointMethod(Object device, Method method, KnxDeviceConfig deviceConfig) {
-		KnxRequestDatapointMethod annotation = method.getAnnotation(KnxRequestDatapointMethod.class);
+	private void processRequestDatapointMethod(Object device, Method method,
+			KnxDeviceConfig deviceConfig) {
+		KnxRequestDatapoint annotation = method.getAnnotation(KnxRequestDatapoint.class);
 		String groupObjectName = annotation.groupObjectName();
 		KnxGroupObjectConfig groupObjectConfig = deviceConfig.getGroupObject(groupObjectName);
 
 		// Check if we have a group object that matches this updateDatapoint method
 		if (groupObjectConfig == null) {
 			log.error("Unable to find a group object named " + groupObjectName + " on device "
-					+ deviceConfig.getApplicationName() + ". Skipping request datapoint method " + method.getName());
+					+ deviceConfig.getApplicationName() + ". Skipping request datapoint method "
+					+ method.getName());
 			return;
 		}
 
 		// Check if the method has a single parameter whose type matches the group object
-		if (method.getParameterCount() > 0 || !method.getReturnType().equals(groupObjectConfig.getType())) {
+		if (method.getParameterCount() > 0
+				|| !method.getReturnType().equals(groupObjectConfig.getType())) {
 			log.error("Request datapoint method for group object " + groupObjectName
-					+ " must not have any parameters and return an object of type " + groupObjectConfig.getType());
+					+ " must not have any parameters and return an object of type "
+					+ groupObjectConfig.getType());
 			return;
 		}
 
-		log.debug("Found request datapoint method: " + method.getName() + " for group object " + groupObjectName);
+		log.debug("Found request datapoint method: " + method.getName() + " for group object "
+				+ groupObjectName);
+
+		// If a group object has a requestDatapointMethod, make sure the R flag is set
+		if (!groupObjectConfig.isReadFlag()) {
+			log.info("Group object " + groupObjectConfig.getName()
+					+ " has an update datapoint method defined, but the read flag is not "
+					+ "enabled. Enabling now.");
+			groupObjectConfig.setReadFlag(true);
+		}
+
 		groupObjectConfig.setRequestDatapointMethod(method);
 	}
 
 	private void processPostStartMethod(Object device, Method method, KnxDeviceConfig deviceConfig) {
 		log.debug("Found post start method: " + method.getName());
 
-		// Check if we have already retrieved an init method for this device
+		// Check if we have already retrieved a post start method for this device
 		if (deviceConfig.getPostStartMethod() != null) {
-			log.error("Device " + deviceConfig.getApplicationName() + " has already an post start method defined: "
+			log.error("Device " + deviceConfig.getApplicationName()
+					+ " has already a post start method defined: "
 					+ deviceConfig.getPostStartMethod().getName()
-					+ ". Only one post start method can be defined. Post start method " + method.getName()
+					+ ". Only one post start method can be defined. Post start method "
+					+ method.getName() + " is being ignored.");
+			return;
+		}
+
+		// Make sure the post start method doesn't have any parameters defined
+		if (method.getParameterCount() > 0) {
+			log.error("Post start method " + method.getName() + " has " + method.getParameterCount()
+					+ " parameters: " + method.getParameters()
+					+ ". Post start method cannot have parameters. Post start method " + method.getName()
+					+ " is being ignored.");
+			return;
+		}
+
+		deviceConfig.setPostStartMethod(method);
+	}
+
+	private void processPostRestartMethod(Object device, Method method,
+			KnxDeviceConfig deviceConfig) {
+		log.debug("Found post restart method: " + method.getName());
+
+		// Check if we have already retrieved an init method for this device
+		if (deviceConfig.getPostRestartMethod() != null) {
+			log.error("Device " + deviceConfig.getApplicationName()
+					+ " has already a post restart method defined: "
+					+ deviceConfig.getPostRestartMethod().getName()
+					+ ". Only one post restart method can be defined. Post restart method "
+					+ method.getName() + " is being ignored.");
+			return;
+		}
+
+		// Make sure the post restart method doesn't have any parameters defined
+		if (method.getParameterCount() > 0) {
+			log.error("Post restart method " + method.getName() + " has " + method.getParameterCount()
+					+ " parameters: " + method.getParameters()
+					+ ". Post restart method cannot have parameters. Post restart method "
+					+ method.getName() + " is being ignored.");
+			return;
+		}
+
+		deviceConfig.setPostRestartMethod(method);
+	}
+
+	private void processPreShutdownMethod(Object device, Method method,
+			KnxDeviceConfig deviceConfig) {
+		log.debug("Found pre shutdown method: " + method.getName());
+
+		// Check if we have already retrieved an init method for this device
+		if (deviceConfig.getPreShutdownMethod() != null) {
+			log.error("Device " + deviceConfig.getApplicationName()
+					+ " has already a pre shutdown method defined: "
+					+ deviceConfig.getPreShutdownMethod().getName()
+					+ ". Only one pre shutdown can be defined. Pre shutdown method " + method.getName()
 					+ " is being ignored.");
 			return;
 		}
 
 		// Make sure the post start method doesn't have any parameters defined
 		if (method.getParameterCount() > 0) {
-			log.error("Post start method " + method.getName() + " has " + method.getParameterCount() + " parameters: "
-					+ method.getParameters() + ". Post start method cannot have parameters. Post start method "
+			log.error("Pre shutdown method " + method.getName() + " has " + method.getParameterCount()
+					+ " parameters: " + method.getParameters()
+					+ ". Pre shutdown method cannot have parameters. Pre shutdown method "
 					+ method.getName() + " is being ignored.");
 			return;
 		}
 
-		deviceConfig.setPostStartMethod(method);
+		deviceConfig.setPreShutdownMethod(method);
 	}
 
 	@Override

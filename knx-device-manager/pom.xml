@@ -22,6 +22,10 @@
 			<artifactId>knx-device-model</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>lu.berscheid.knx</groupId>
+			<artifactId>knx-device-utils</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>com.github.calimero</groupId>
 			<artifactId>calimero-core</artifactId>
 			<version>${calimero.version}</version>

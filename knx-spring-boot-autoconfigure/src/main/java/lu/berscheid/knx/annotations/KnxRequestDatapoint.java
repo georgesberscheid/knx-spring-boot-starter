@@ -11,6 +11,6 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @Inherited
-public @interface KnxUpdateDatapointMethod {
-	String groupObjectName();
+public @interface KnxRequestDatapoint {
+	String groupObjectName() default "";
 }

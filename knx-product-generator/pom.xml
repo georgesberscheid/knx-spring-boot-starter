@@ -36,5 +36,9 @@
 			<groupId>lu.berscheid.knx</groupId>
 			<artifactId>knx-device-model</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>lu.berscheid.knx</groupId>
+			<artifactId>knx-device-utils</artifactId>
+		</dependency>
 	</dependencies>
 </project>
