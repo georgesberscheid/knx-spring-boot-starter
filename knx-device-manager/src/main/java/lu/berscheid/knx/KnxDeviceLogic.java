@@ -1,6 +1,7 @@
 package lu.berscheid.knx;
 
 import static lu.berscheid.knx.utils.KnxTypeUtils.isBoolean;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isEnum;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isDouble;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isFloat;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isInteger;
@@ -314,6 +315,7 @@ public class KnxDeviceLogic extends PatchedKnxDeviceServiceLogic {
 	/*
 	 * Read all device parameters from the application program memory
 	 */
+	@SuppressWarnings("unchecked")
 	protected void updateApplicationProgramFromMemory(byte[] applicationProgram) {
 		DataInputStream applicationProgramStream = new DataInputStream(
 				new ByteArrayInputStream(applicationProgram));
@@ -321,19 +323,28 @@ public class KnxDeviceLogic extends PatchedKnxDeviceServiceLogic {
 			Object value;
 			try {
 				// Read from the stream depending on the type of the parameter
-				if (isInteger(parameterConfig.getType())) {
+				if (isBoolean(parameterConfig.getType())) {
+					// Booleans are stored as 1 or 0 bytes
+					int b = applicationProgramStream.readUnsignedByte();
+					value = b != 0;
+				} else if (isInteger(parameterConfig.getType())) {
 					value = applicationProgramStream.readInt();
 				} else if (isLong(parameterConfig.getType())) {
 					value = applicationProgramStream.readLong();
 				} else if (isDouble(parameterConfig.getType())) {
 					value = applicationProgramStream.readDouble();
 				} else if (isFloat(parameterConfig.getType())) {
+					// TODO: this doesn't read properly yet
 					value = applicationProgramStream.readFloat();
 				} else if (isString(parameterConfig.getType())) {
 					int sizeInBytes = parameterConfig.getTypeConfig().getSizeInBit() / 8;
 					byte[] bytes = new byte[sizeInBytes];
 					applicationProgramStream.read(bytes);
-					value = new String(bytes).trim();
+					value = new String(bytes, "Cp1252").trim();
+				} else if (isEnum(parameterConfig.getType())) {
+					// Enums are stored as bytes representing their ordinal
+					int b = applicationProgramStream.readUnsignedByte();
+					value = ((Class<Enum<?>>) parameterConfig.getType()).getEnumConstants()[b];
 				} else {
 					log.warn("Unknown type: " + parameterConfig.getTypeConfig().getType());
 					continue;

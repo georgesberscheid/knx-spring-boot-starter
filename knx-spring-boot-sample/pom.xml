@@ -20,10 +20,6 @@
 			<groupId>lu.berscheid.knx</groupId>
 			<artifactId>knx-spring-boot-autoconfigure</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-simple</artifactId>
-		</dependency>
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

@@ -1,6 +1,9 @@
 package lu.berscheid.knx.generator;
 
+import static lu.berscheid.knx.utils.KnxTypeUtils.isBoolean;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isEnum;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isFloat;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isDouble;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isInteger;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isString;
 
@@ -52,6 +55,8 @@ import lu.berscheid.knx.generator.model.ParameterRefT;
 import lu.berscheid.knx.generator.model.ParameterTypeT;
 import lu.berscheid.knx.generator.model.ParameterTypeT.TypeFloat;
 import lu.berscheid.knx.generator.model.ParameterTypeT.TypeNumber;
+import lu.berscheid.knx.generator.model.ParameterTypeT.TypeRestriction;
+import lu.berscheid.knx.generator.model.ParameterTypeT.TypeRestriction.Enumeration;
 import lu.berscheid.knx.generator.model.ParameterTypeT.TypeText;
 import lu.berscheid.knx.generator.model.RegistrationInfoT;
 import lu.berscheid.knx.generator.model.RegistrationStatusT;
@@ -162,15 +167,25 @@ public class KnxProductGenerator {
 			ParameterTypeT parameterType = new ParameterTypeT();
 			parameterType.setName(String.format("PT-%d", count));
 			parameterType.setId(String.format("%s_PT-%d", applicationProgram.getId(), count));
+			String parameterDefaultValue = parameterConfig.getValue().toString();
 			// TODO deal with all parameter types
-			if (isInteger(parameterConfig.getType())) {
+			if (isBoolean(parameterConfig.getType())) {
+				TypeNumber typeNumber = new TypeNumber();
+				typeNumber.setSizeInBit(8);
+				typeNumber.setType("signedInt");
+				typeNumber.setMinInclusive(0);
+				typeNumber.setMaxInclusive(1);
+				typeNumber.setUiHint("CheckBox");
+				parameterType.setTypeNumber(typeNumber);
+				parameterDefaultValue = ((boolean) parameterConfig.getValue()) ? "1" : "0";
+			} else if (isInteger(parameterConfig.getType())) {
 				TypeNumber typeNumber = new TypeNumber();
 				typeNumber.setSizeInBit(typeConfig.getSizeInBit());
 				typeNumber.setType("signedInt");
-				typeNumber.setMinInclusive(typeConfig.getMinInclusive());
-				typeNumber.setMaxInclusive(typeConfig.getMaxInclusive());
+				typeNumber.setMinInclusive((long) typeConfig.getMinInclusive());
+				typeNumber.setMaxInclusive((long) typeConfig.getMaxInclusive());
 				parameterType.setTypeNumber(typeNumber);
-			} else if (isFloat(parameterConfig.getType())) {
+			} else if (isFloat(parameterConfig.getType()) || isDouble(parameterConfig.getType())) {
 				TypeFloat typeFloat = new TypeFloat();
 				typeFloat.setMinInclusive(typeConfig.getMinInclusive());
 				typeFloat.setMaxInclusive(typeConfig.getMaxInclusive());
@@ -179,6 +194,21 @@ public class KnxProductGenerator {
 				TypeText typeText = new TypeText();
 				typeText.setSizeInBit(typeConfig.getSizeInBit());
 				parameterType.setTypeText(typeText);
+			} else if (isEnum(parameterConfig.getType())) {
+				TypeRestriction typeRestriction = new TypeRestriction();
+				typeRestriction.setBase("Value");
+				typeRestriction.setSizeInBit(8);
+				for (Enum<?> en : ((Class<? extends Enum>) parameterConfig.getType())
+						.getEnumConstants()) {
+					Enumeration e = new Enumeration();
+					e.setText(en.toString());
+					e.setValue(en.ordinal());
+					e.setId(parameterType.getId() + "_EN-" + e.getValue());
+					typeRestriction.getEnumeration().add(e);
+				}
+				parameterType.setTypeRestriction(typeRestriction);
+				parameterDefaultValue = String
+						.valueOf(((Enum<?>) parameterConfig.getValue()).ordinal());
 			}
 			parameterTypes.getParameterType().add(parameterType);
 
@@ -186,7 +216,7 @@ public class KnxProductGenerator {
 			ParameterT parameter = new ParameterT();
 			parameter.setName(parameterConfig.getName());
 			parameter.setText(parameterConfig.getText());
-			parameter.setValue(parameterConfig.getValue().toString());
+			parameter.setValue(parameterDefaultValue);
 			parameter.setParameterType(parameterType.getId());
 			MemoryParameterT memoryParameter = new MemoryParameterT();
 			memoryParameter.setCodeSegment(codeSegment.getId());
