@@ -95,6 +95,11 @@ public class KnxTypeUtils {
 		return type.equals(float.class) || type.equals(Float.class);
 	}
 
+	public static boolean isEnum(Class<?> type) {
+		if (type == null) return false;
+		return Enum.class.isAssignableFrom(type);
+	}
+
 	public static boolean isString(Class<?> type) {
 		if (type == null) return false;
 		return type.equals(String.class) || type.equals(CharSequence.class)

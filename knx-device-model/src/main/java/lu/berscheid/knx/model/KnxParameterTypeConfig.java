@@ -6,8 +6,8 @@ import lombok.Data;
 public class KnxParameterTypeConfig {
 
 	private int sizeInBit;
-	private long minInclusive;
-	private long maxInclusive;
+	private double minInclusive;
+	private double maxInclusive;
 	protected Class<?> type;
 
 	public String getName() {

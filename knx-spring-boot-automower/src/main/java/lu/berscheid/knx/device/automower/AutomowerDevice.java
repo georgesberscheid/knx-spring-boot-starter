@@ -88,7 +88,7 @@ public class AutomowerDevice {
 	@KnxGroupObject(flags = { C, R, T },
 			text = "Start / Park",
 			functionText = "Value for toggle",
-			datapointType = "1.001", // Switch
+			datapointType = "1.010", // Start / Stop
 			groupAddresses = "${automower.startStopStateAddress}")
 	private GroupObject<Boolean> startStopState;
 

@@ -1,5 +1,9 @@
 package lu.berscheid.knx;
 
+import static lu.berscheid.knx.utils.KnxTypeUtils.isBoolean;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isDouble;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isEnum;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isFloat;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isInteger;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isLong;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isString;
@@ -172,7 +176,7 @@ public class KnxAutoConfiguration
 			field.setAccessible(true);
 			Object value = field.get(device);
 			if (value != null) {
-				config.setValue(value.toString());
+				config.setValue(value);
 			}
 		} catch (IllegalArgumentException | IllegalAccessException e) {
 			log.warn("Unable to get default value from device " + device.getClass() + " for field "
@@ -183,9 +187,13 @@ public class KnxAutoConfiguration
 		typeConfig.setType(field.getType());
 
 		// Check for supported parameter types
-		long minInclusive = annotation.minInclusive();
-		long maxInclusive = annotation.maxInclusive();
-		if (isInteger(typeConfig.getType())) {
+		double minInclusive = annotation.minInclusive();
+		double maxInclusive = annotation.maxInclusive();
+		if (isBoolean(typeConfig.getType())) {
+			typeConfig.setMinInclusive(0);
+			typeConfig.setMaxInclusive(1);
+			typeConfig.setSizeInBit(8);
+		} else if (isInteger(typeConfig.getType())) {
 			typeConfig.setMinInclusive(minInclusive == -1 ? Integer.MIN_VALUE : minInclusive);
 			typeConfig.setMaxInclusive(maxInclusive == -1 ? Integer.MAX_VALUE : maxInclusive);
 			typeConfig.setSizeInBit(32);
@@ -193,9 +201,21 @@ public class KnxAutoConfiguration
 			typeConfig.setMinInclusive(minInclusive == -1 ? Long.MIN_VALUE : minInclusive);
 			typeConfig.setMaxInclusive(maxInclusive == -1 ? Long.MAX_VALUE : maxInclusive);
 			typeConfig.setSizeInBit(64);
+		} else if (isFloat(typeConfig.getType())) {
+			typeConfig.setMinInclusive(Float.MIN_VALUE);
+			typeConfig.setMaxInclusive(Float.MAX_VALUE);
+			typeConfig.setSizeInBit(32);
+		} else if (isDouble(typeConfig.getType())) {
+			log.warn(
+					"KNX doesn't support 64bit floating point types (double). Reducing to 32bit (float).");
+			typeConfig.setMinInclusive(Float.MIN_VALUE);
+			typeConfig.setMaxInclusive(Float.MAX_VALUE);
+			typeConfig.setSizeInBit(32);
 		} else if (isString(typeConfig.getType())) {
 			// If the size wasn't defined, use a default value of 50 bytes
 			typeConfig.setSizeInBit(annotation.sizeInBit() == 0 ? 50 * 8 : annotation.sizeInBit());
+		} else if (isEnum(typeConfig.getType())) {
+			typeConfig.setSizeInBit(8);
 		} else {
 			throw new RuntimeException("Parameter type " + field.getType() + " is not supported.");
 		}
@@ -268,9 +288,9 @@ public class KnxAutoConfiguration
 		config.setUpdateFlag(flags.contains(Flag.U));
 		config.setWriteFlag(flags.contains(Flag.W));
 		config.setName(field.getName());
-		config.setText(annotation.text());
+		config.setText(annotation.text() != null ? annotation.text() : config.getName());
 		config.setFunctionText(
-				annotation.functionText() != null ? annotation.functionText() : annotation.text());
+				annotation.functionText() != null ? annotation.functionText() : config.getText());
 		config.setSizeInBits(annotation.sizeInBits());
 		config.setPriority(Priority.LOW);
 		deviceConfig.addGroupObject(config);

@@ -16,7 +16,7 @@ public @interface KnxDeviceParameter {
 
 	int sizeInBit() default 0;
 
-	long minInclusive() default -1;
+	double minInclusive() default -1;
 
-	long maxInclusive() default -1;
+	double maxInclusive() default -1;
 }

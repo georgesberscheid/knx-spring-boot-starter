@@ -1,5 +1,10 @@
 package lu.berscheid.knx.device.sample;
 
+import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.C;
+import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.R;
+import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.T;
+import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.W;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
@@ -15,11 +20,6 @@ import lu.berscheid.knx.annotations.KnxRequestDatapoint;
 import lu.berscheid.knx.annotations.KnxUpdateDatapoint;
 import lu.berscheid.knx.model.GroupObject;
 import lu.berscheid.knx.model.KnxException;
-
-import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.C;
-import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.R;
-import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.T;
-import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.W;
 
 @SpringBootApplication
 @KnxDevice(productName = "KNX Sample device", // Appears as the name in the catalog in ETS
@@ -42,20 +42,50 @@ public class SampleDevice {
 	 * annotated with @KnxDeviceParameter can be programmed through ETS. The initialized parameter
 	 * value will appear as default value in ETS.
 	 */
-	@KnxDeviceParameter(sizeInBit = 400)
+	@KnxDeviceParameter(text = "Some String", sizeInBit = 400)
 	private String stringParameter = "This is a test";
-	@KnxDeviceParameter(minInclusive = 0, maxInclusive = 1000)
+
+	@KnxDeviceParameter(text = "Some Integer", minInclusive = 0, maxInclusive = 1000)
 	private int intParameter = 20;
+
+	@KnxDeviceParameter(text = "Some Float", minInclusive = 0, maxInclusive = 1000)
+	private float floatParameter = 2.5f;
+
+	/*
+	 * Boolean device parameters are rendered as checkboxes in ETS
+	 */
+	@KnxDeviceParameter(text = "Some Checkbox")
+	private boolean checkBox = true;
+
+	/*
+	 * If the enum has only 2 values, they're rendered as radio buttons
+	 */
+	@KnxDeviceParameter(text = "Some radio buttons")
+	private ActiveEnum active = ActiveEnum.NOT_ACTIVE;
+
+	/*
+	 * If the enum has more than 2 values, they're rendered as a drop down box
+	 */
+	@KnxDeviceParameter(text = "Some drop down box")
+	private ItemsEnum item = ItemsEnum.SECOND_ITEM;
 
 	/*
 	 * Group objects will appear in the 'Group Objects' tab of the ETS configuration pane. Fields
 	 * annotated with @KnxGroupObject can be programmed through ETS. Group addresses assigned during
 	 * object initialization will be overwritten by ETS programming.
 	 */
-	@KnxGroupObject(flags = { C, R, W, T }, groupAddresses = { "${knx.booleanGroupAddress}" })
+	@KnxGroupObject(text = "On / Off",
+			functionText = "Switch",
+			flags = { C, R, W, T },
+			datapointType = "1.001", // Switch
+			groupAddresses = { "${knx.booleanGroupAddress}" })
 	private GroupObject<Boolean> booleanGroupObject;
 
-	@KnxGroupObject(flags = { C, R, W, T }, groupAddresses = { "${knx.integerGroupAddress}" })
+	@KnxGroupObject(text = "Brightness",
+			functionText = "Value",
+			flags = { C, R, W, T },
+			datapointType = "7.013", // Brightness
+			groupAddresses = { "${knx.integerGroupAddress}" })
 	private GroupObject<Integer> integerGroupObject;
 
 	/*
@@ -69,6 +99,10 @@ public class SampleDevice {
 		log.info("integerGroupObject has group addresses: " + integerGroupObject.getGroupAddresses());
 		log.info("stringParameter has value: " + stringParameter);
 		log.info("intParameter has value: " + intParameter);
+		log.info("floatParameter has value: " + floatParameter);
+		log.info("checkBox has value: " + checkBox);
+		log.info("active has value: " + active);
+		log.info("item has value: " + item);
 
 		booleanGroupObject.write(true);
 		integerGroupObject.write(20);
@@ -86,6 +120,10 @@ public class SampleDevice {
 		log.info("integerGroupObject has group addresses: " + integerGroupObject.getGroupAddresses());
 		log.info("stringParameter has value: " + stringParameter);
 		log.info("intParameter has value: " + intParameter);
+		log.info("floatParameter has value: " + floatParameter);
+		log.info("checkBox has value: " + checkBox);
+		log.info("active has value: " + active);
+		log.info("item has value: " + item);
 	}
 
 	/*
@@ -122,5 +160,41 @@ public class SampleDevice {
 	public Integer requestInteger() {
 		log.info("Requesting value for integer group object: " + integerGroupObject.getValue());
 		return integerGroupObject.getValue();
+	}
+
+	/*
+	 * Enums are converted into radio buttons or drop-down boxes in ETS. Override toString() to
+	 * generate some custom descriptions in the Parameters panel in ETS.
+	 */
+	public enum ActiveEnum {
+
+		ACTIVE("active"), // active
+		NOT_ACTIVE("not active"); // not active
+
+		private ActiveEnum(String description) {
+			this.description = description;
+		}
+
+		private String description;
+
+		public String toString() {
+			return description;
+		}
+	}
+
+	public enum ItemsEnum {
+
+		FIRST_ITEM("First item"), SECOND_ITEM("Second item"), THIRD_ITEM("Third item"), FORTH_ITEM(
+				"Forth item"), FIFTH_ITEM("Fifth item");
+
+		private ItemsEnum(String description) {
+			this.description = description;
+		}
+
+		private String description;
+
+		public String toString() {
+			return description;
+		}
 	}
 }
