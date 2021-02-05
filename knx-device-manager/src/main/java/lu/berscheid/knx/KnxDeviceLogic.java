@@ -189,7 +189,7 @@ public class KnxDeviceLogic extends PatchedKnxDeviceServiceLogic {
 		syncRuntimeFromMemory();
 
 		// Run post restart method
-		if (deviceConfig.getPostStartMethod() != null) {
+		if (deviceConfig.getPostRestartMethod() != null) {
 			try {
 				deviceConfig.getPostRestartMethod().setAccessible(true);
 				deviceConfig.getPostRestartMethod().invoke(deviceConfig.getDeviceInstance());
