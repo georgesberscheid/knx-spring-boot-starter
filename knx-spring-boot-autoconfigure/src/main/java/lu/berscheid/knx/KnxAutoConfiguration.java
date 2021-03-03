@@ -10,6 +10,7 @@ import static lu.berscheid.knx.utils.KnxTypeUtils.isString;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -33,6 +34,7 @@ import com.github.rvesse.airline.Cli;
 import lombok.extern.slf4j.Slf4j;
 import lu.berscheid.knx.annotations.KnxDevice;
 import lu.berscheid.knx.annotations.KnxDeviceParameter;
+import lu.berscheid.knx.annotations.KnxDeviceParameterBlock;
 import lu.berscheid.knx.annotations.KnxGroupObject;
 import lu.berscheid.knx.annotations.KnxGroupObject.Flag;
 import lu.berscheid.knx.annotations.KnxPostRestart;
@@ -46,6 +48,8 @@ import lu.berscheid.knx.model.GroupObject;
 import lu.berscheid.knx.model.KnxDeviceConfig;
 import lu.berscheid.knx.model.KnxGroupObjectConfig;
 import lu.berscheid.knx.model.KnxGroupObjectConfig.Priority;
+import lu.berscheid.knx.model.KnxParameterBlockConfig;
+import lu.berscheid.knx.model.KnxParameterBlockParent;
 import lu.berscheid.knx.model.KnxParameterConfig;
 import lu.berscheid.knx.model.KnxParameterTypeConfig;
 import lu.berscheid.knx.utils.KnxTypeUtils;
@@ -70,6 +74,10 @@ public class KnxAutoConfiguration
 		}
 	}
 
+	/*
+	 * Method called by the container for each bean in the application contexts. That's how we
+	 * filter @KnxDevice beans.
+	 */
 	public Object postProcessBeforeInitialization(Object bean, String beanName)
 			throws BeansException {
 		if (!bean.getClass().isAnnotationPresent(KnxDevice.class)) {
@@ -118,22 +126,15 @@ public class KnxAutoConfiguration
 				annotation.productName().equals("") ? className : annotation.productName());
 		config.setProductOrderNumber(annotation.productOrderNumber());
 
-		// Look for fields annotated with @KnxDeviceParameter
-		ReflectionUtils.doWithFields(bean.getClass(), field -> processParameters(bean, field, config),
-				field -> matchFieldWithAnnotation(field, KnxDeviceParameter.class));
+		// Create a default parameter block for all parameters and group objects defined inline in the
+		// device class
+		KnxParameterBlockConfig defaultBlockConfig = new KnxParameterBlockConfig();
+		defaultBlockConfig.setBlockName("DefaultParameters");
+		defaultBlockConfig.setBlockText(annotation.defaultParameterBlockText());
+		config.addParameterBlock(defaultBlockConfig);
 
-		// Look for fields annotated with @KnxGroupObject
-		ReflectionUtils.doWithFields(bean.getClass(),
-				field -> processGroupObjects(bean, field, config),
-				field -> matchFieldWithAnnotation(field, KnxGroupObject.class));
-
-		// Look for update and request datapoint methods
-		ReflectionUtils.doWithMethods(bean.getClass(),
-				method -> processUpdateDatapointMethod(bean, method, config),
-				method -> matchMethodWithAnnotation(method, KnxUpdateDatapoint.class));
-		ReflectionUtils.doWithMethods(bean.getClass(),
-				method -> processRequestDatapointMethod(bean, method, config),
-				method -> matchMethodWithAnnotation(method, KnxRequestDatapoint.class));
+		// Build the parameter block starting with the device itself as default block
+		buildParameterBlock(bean, defaultBlockConfig, config, 0);
 
 		// Look for a KNX post start method
 		ReflectionUtils.doWithMethods(bean.getClass(),
@@ -150,7 +151,7 @@ public class KnxAutoConfiguration
 				method -> processPreShutdownMethod(bean, method, config),
 				method -> matchMethodWithAnnotation(method, KnxPreShutdown.class));
 
-		log.trace("Device config: " + config.toString());
+		log.info("Device config: " + config.toString());
 		knxDeviceConfigs.add(config);
 
 		return bean;
@@ -164,7 +165,101 @@ public class KnxAutoConfiguration
 		return method.getAnnotation(clazz) != null;
 	}
 
-	private void processParameters(Object device, Field field, KnxDeviceConfig deviceConfig) {
+	/**
+	 * Processes a parameter block.
+	 * 
+	 * @param currentBlock
+	 *           the object instance that represents the block. Can be an object annotated
+	 *           with @KnxDevice (this will then be the default block) or an object annotated
+	 *           with @KnxDeviceParameterBlock (for nested parameter blocks).
+	 * @param blockField
+	 *           the field that was annotated with @KnxDeviceParameterBlock. For the default
+	 *           parameter block this value is null.
+	 * @param currentBlockConfig
+	 *           the block configuration that all the parameters and group objects should be added
+	 *           to. This is either the default block or an explicit block.
+	 * @param blockParent
+	 *           the block configuration that the block configuration should be added to.
+	 */
+	private void buildParameterBlock(final Object currentBlock,
+			KnxParameterBlockConfig currentBlockConfig, KnxParameterBlockParent blockParent,
+			int nestedLevel) {
+		// Check if we're not already nesting too deep
+		if (nestedLevel > 2) {
+			log.warn("Parameter block " + currentBlockConfig.getBlockName()
+					+ " is nested too deep. Ignoring.");
+			return;
+		}
+
+		// Look for fields annotated with @KnxDeviceParameter
+		ReflectionUtils.doWithFields(currentBlock.getClass(),
+				field -> processParameters(currentBlock, field, currentBlockConfig),
+				field -> matchFieldWithAnnotation(field, KnxDeviceParameter.class));
+
+		// Look for fields annotated with @KnxGroupObject
+		ReflectionUtils.doWithFields(currentBlock.getClass(),
+				field -> processGroupObjects(currentBlock, field, currentBlockConfig),
+				field -> matchFieldWithAnnotation(field, KnxGroupObject.class));
+
+		// Look for update and request datapoint methods
+		ReflectionUtils.doWithMethods(currentBlock.getClass(),
+				method -> processUpdateDatapointMethod(currentBlock, method, currentBlockConfig),
+				method -> matchMethodWithAnnotation(method, KnxUpdateDatapoint.class));
+		ReflectionUtils.doWithMethods(currentBlock.getClass(),
+				method -> processRequestDatapointMethod(currentBlock, method, currentBlockConfig),
+				method -> matchMethodWithAnnotation(method, KnxRequestDatapoint.class));
+
+		// Look for nested parameter blocks
+		ReflectionUtils.doWithFields(currentBlock.getClass(),
+				field -> processParameterBlock(currentBlock, field, currentBlockConfig, blockParent,
+						nestedLevel),
+				field -> matchFieldWithAnnotation(field, KnxDeviceParameterBlock.class));
+	}
+
+	private void processParameterBlock(final Object currentBlock, Field blockField,
+			KnxParameterBlockConfig currentBlockConfig, KnxParameterBlockParent blockParent,
+			int nestedLevel) {
+		// We found a @KnxDeviceParameterBlock annotated field
+		KnxDeviceParameterBlock annotation = blockField.getAnnotation(KnxDeviceParameterBlock.class);
+		try {
+			blockField.setAccessible(true);
+			// Use the explicit block for recursive processing
+			Object nestedBlock = blockField.get(currentBlock);
+			if (nestedBlock == null) {
+				// This means the field has not been initialized, and we're going to try to do so by
+				// calling the no-args constructor
+				try {
+					nestedBlock = blockField.getType().getDeclaredConstructor().newInstance();
+				} catch (InstantiationException | InvocationTargetException | NoSuchMethodException
+						| SecurityException e) {
+					log.error("Unable to initialize the parameter block object " + annotation.text()
+							+ " of type " + blockField.getType() + ". Either make sure it's initialized"
+							+ " or add a no-args constructor. Original error: " + e.getMessage());
+					return;
+				}
+			}
+			KnxParameterBlockConfig nestedBlockConfig = new KnxParameterBlockConfig();
+			nestedBlockConfig.setBlockName(blockField.getName());
+			nestedBlockConfig.setBlockText(annotation.text());
+			// If the new block is supposed to be nested, add it to the current block, otherwise add
+			// it alongside the current block to the parent block. This only applies for the first
+			// level, all other levels are automatically nested.
+			if (annotation.nested() || nestedLevel > 0) {
+				currentBlockConfig.addParameterBlock(nestedBlockConfig);
+			} else {
+				blockParent.addParameterBlock(nestedBlockConfig);
+			}
+
+			// Then build the new block
+			buildParameterBlock(nestedBlock, nestedBlockConfig, currentBlockConfig, ++nestedLevel);
+		} catch (IllegalArgumentException | IllegalAccessException e) {
+			log.warn("Unable to get default value from block " + currentBlock.getClass()
+					+ " for field " + blockField.getName() + ": " + e.getMessage());
+			return;
+		}
+	}
+
+	private void processParameters(Object device, Field field, KnxParameterBlockConfig blockConfig) {
 		log.debug("Found KNX Parameter: " + field.getName());
 		KnxDeviceParameter annotation = field.getAnnotation(KnxDeviceParameter.class);
 		KnxParameterConfig config = new KnxParameterConfig();
@@ -221,10 +316,11 @@ public class KnxAutoConfiguration
 		}
 		config.setTypeConfig(typeConfig);
 
-		deviceConfig.addParameter(config);
+		blockConfig.addParameter(config);
 	}
 
-	private void processGroupObjects(Object device, Field field, KnxDeviceConfig deviceConfig) {
+	private void processGroupObjects(Object device, Field field,
+			KnxParameterBlockConfig blockConfig) {
 		log.debug("Found KNX Group Object: " + field.getName());
 		KnxGroupObject annotation = field.getAnnotation(KnxGroupObject.class);
 		KnxGroupObjectConfig config = new KnxGroupObjectConfig();
@@ -293,19 +389,19 @@ public class KnxAutoConfiguration
 				annotation.functionText() != null ? annotation.functionText() : config.getText());
 		config.setSizeInBits(annotation.sizeInBits());
 		config.setPriority(Priority.LOW);
-		deviceConfig.addGroupObject(config);
+		blockConfig.addGroupObject(config);
 	}
 
 	private void processUpdateDatapointMethod(Object device, Method method,
-			KnxDeviceConfig deviceConfig) {
+			KnxParameterBlockConfig blockConfig) {
 		KnxUpdateDatapoint annotation = method.getAnnotation(KnxUpdateDatapoint.class);
 		String groupObjectName = annotation.groupObjectName();
-		KnxGroupObjectConfig groupObjectConfig = deviceConfig.getGroupObject(groupObjectName);
+		KnxGroupObjectConfig groupObjectConfig = blockConfig.getGroupObject(groupObjectName);
 
 		// Check if we have a group object that matches this updateDatapoint method
 		if (groupObjectConfig == null) {
-			log.error("Unable to find a group object named " + groupObjectName + " on device "
-					+ deviceConfig.getApplicationName() + ". Skipping update datapoint method "
+			log.error("Unable to find a group object named " + groupObjectName + " on block "
+					+ blockConfig.getBlockName() + ". Skipping update datapoint method "
 					+ method.getName());
 			return;
 		}
@@ -333,15 +429,15 @@ public class KnxAutoConfiguration
 	}
 
 	private void processRequestDatapointMethod(Object device, Method method,
-			KnxDeviceConfig deviceConfig) {
+			KnxParameterBlockConfig blockConfig) {
 		KnxRequestDatapoint annotation = method.getAnnotation(KnxRequestDatapoint.class);
 		String groupObjectName = annotation.groupObjectName();
-		KnxGroupObjectConfig groupObjectConfig = deviceConfig.getGroupObject(groupObjectName);
+		KnxGroupObjectConfig groupObjectConfig = blockConfig.getGroupObject(groupObjectName);
 
 		// Check if we have a group object that matches this updateDatapoint method
 		if (groupObjectConfig == null) {
-			log.error("Unable to find a group object named " + groupObjectName + " on device "
-					+ deviceConfig.getApplicationName() + ". Skipping request datapoint method "
+			log.error("Unable to find a group object named " + groupObjectName + " on block "
+					+ blockConfig.getBlockName() + ". Skipping request datapoint method "
 					+ method.getName());
 			return;
 		}

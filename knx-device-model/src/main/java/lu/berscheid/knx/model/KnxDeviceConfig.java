@@ -2,12 +2,15 @@ package lu.berscheid.knx.model;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 @Data
-public class KnxDeviceConfig {
+@EqualsAndHashCode(callSuper = true)
+public class KnxDeviceConfig extends KnxParameterBlockParent {
 
 	private String individualAddress;
 	private String manufacturerRefId = "M-00FA"; // KNX Association
@@ -20,26 +23,20 @@ public class KnxDeviceConfig {
 	private String productName;
 	private String productOrderNumber = "O12345";
 
-	private List<KnxParameterConfig> parameters = new ArrayList<KnxParameterConfig>();
-	private List<KnxGroupObjectConfig> groupObjects = new ArrayList<KnxGroupObjectConfig>();
-
 	private Method postStartMethod;
 	private Method postRestartMethod;
 	private Method preShutdownMethod;
 	Object deviceInstance;
 
-	public void addParameter(KnxParameterConfig parameter) {
-		this.parameters.add(parameter);
+	public List<KnxGroupObjectConfig> getGroupObjects() {
+		List<KnxGroupObjectConfig> groupObjects = new ArrayList<KnxGroupObjectConfig>();
+		getParameterBlocks().stream().forEach(pb -> groupObjects.addAll(pb.getGroupObjects()));
+		return Collections.unmodifiableList(groupObjects);
 	}
 
-	public void addGroupObject(KnxGroupObjectConfig groupObject) {
-		this.groupObjects.add(groupObject);
-	}
-
-	public KnxGroupObjectConfig getGroupObject(String name) {
-		for (KnxGroupObjectConfig config : this.groupObjects) {
-			if (config.getName().equals(name)) return config;
-		}
-		return null;
+	public List<KnxParameterConfig> getParameters() {
+		List<KnxParameterConfig> parameters = new ArrayList<KnxParameterConfig>();
+		getParameterBlocks().stream().forEach(pb -> parameters.addAll(pb.getParameters()));
+		return Collections.unmodifiableList(parameters);
 	}
 }

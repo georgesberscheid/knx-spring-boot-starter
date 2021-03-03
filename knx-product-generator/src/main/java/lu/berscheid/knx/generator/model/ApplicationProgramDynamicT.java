@@ -11,16 +11,17 @@ import javax.xml.bind.annotation.XmlType;
 import lombok.Data;
 
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "ApplicationProgramDynamic_t", propOrder = { "channelIndependentBlocks", "applicationProgramChannels",
-		"dependentChannelChooses", "modules", "repeats", })
+@XmlType(name = "ApplicationProgramDynamic_t",
+		propOrder = { "channelIndependentBlocks", "applicationProgramChannels",
+				"dependentChannelChooses", "modules", "repeats", })
 @Data
 public class ApplicationProgramDynamicT {
 
 	@XmlElement(name = "ChannelIndependentBlock")
-	protected List<ChannelIndependentBlockT> channelIndependentBlocks = new ArrayList<ChannelIndependentBlockT>();
+	protected List<ChannelIndependentBlockT> channelIndependentBlocks;
 
 	@XmlElement(name = "Channel")
-	protected List<ApplicationProgramChannelT> applicationProgramChannels;
+	protected List<ApplicationProgramChannelT> applicationProgramChannels = new ArrayList<ApplicationProgramChannelT>();
 
 	@XmlElement(name = "choose", type = DependentChannelChooseT.class)
 	protected List<DependentChannelChooseT> dependentChannelChooses;

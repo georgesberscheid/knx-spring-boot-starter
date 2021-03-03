@@ -63,9 +63,10 @@
 	<modules>
 		<module>knx-device-manager</module>
 		<module>knx-device-model</module>
+		<module>knx-device-utils</module>
 		<module>knx-product-generator</module>
 		<module>knx-spring-boot-autoconfigure</module>
-		<!-- <module>knx-spring-boot-automower</module> -->
+		<module>knx-spring-boot-automower</module>
 		<module>knx-spring-boot-sample</module>
 	</modules>
 

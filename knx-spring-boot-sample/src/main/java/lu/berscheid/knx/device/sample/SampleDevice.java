@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import lu.berscheid.knx.annotations.KnxDevice;
 import lu.berscheid.knx.annotations.KnxDeviceParameter;
+import lu.berscheid.knx.annotations.KnxDeviceParameterBlock;
 import lu.berscheid.knx.annotations.KnxGroupObject;
 import lu.berscheid.knx.annotations.KnxPostRestart;
 import lu.berscheid.knx.annotations.KnxPostStart;
@@ -68,6 +69,23 @@ public class SampleDevice {
 	 */
 	@KnxDeviceParameter(text = "Some drop down box")
 	private ItemsEnum item = ItemsEnum.SECOND_ITEM;
+
+	/*
+	 * We can add additional parameter pages by defining custom classes and annotating them
+	 * with @KnxDeviceParameterBlock
+	 */
+	@KnxDeviceParameterBlock(text = "Additional parameters")
+	private MyParameterBlock additionalParameters;
+
+	@KnxDeviceParameterBlock(text = "Even more parameters")
+	private MyParameterBlock evenMoreParameters;
+
+	/*
+	 * If nested is set to true, this parameter block will appear as a sub-block of the default
+	 * parameter block in ETS.
+	 */
+	@KnxDeviceParameterBlock(text = "Nested parameters", nested = true)
+	private MyNestedParameterBlock nestedParameters;
 
 	/*
 	 * Group objects will appear in the 'Group Objects' tab of the ETS configuration pane. Fields
@@ -196,5 +214,29 @@ public class SampleDevice {
 		public String toString() {
 			return description;
 		}
+	}
+
+	/*
+	 * Parameters can be nested in custom blocks
+	 */
+	public static class MyParameterBlock {
+
+		@KnxDeviceParameter(text = "Nested String", sizeInBit = 400)
+		private String stringParameter = "This is String in a separate parameter page.";
+
+		@KnxDeviceParameter(text = "Nested Integer", minInclusive = 0, maxInclusive = 1000)
+		private int intParameter = 40;
+
+		@KnxDeviceParameterBlock(text = "Nested Parameters")
+		private MyNestedParameterBlock nestedBlock;
+	}
+
+	public static class MyNestedParameterBlock {
+
+		@KnxDeviceParameter(text = "Some Checkbox")
+		private boolean checkBox = true;
+
+		@KnxDeviceParameter(text = "Some drop down box")
+		private ItemsEnum item = ItemsEnum.SECOND_ITEM;
 	}
 }

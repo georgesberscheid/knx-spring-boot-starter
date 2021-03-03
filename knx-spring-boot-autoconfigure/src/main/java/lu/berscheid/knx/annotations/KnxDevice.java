@@ -39,4 +39,7 @@ public @interface KnxDevice {
 	String productName() default "";
 
 	String productOrderNumber() default "1";
+
+	// The default name of the parameter block shown in ETS
+	String defaultParameterBlockText() default "Parameters";
 }

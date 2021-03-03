@@ -13,7 +13,8 @@ import lu.berscheid.knx.model.KnxDeviceConfig;
 
 @Component
 @Slf4j
-@Command(name = "createKnxProd", description = "Create .knxprod files from the device configurations")
+@Command(name = "createKnxProd",
+		description = "Create .knxprod files from the device configurations")
 public class CreateKnxProdCommand implements KnxRunnable {
 
 	@Option(name = { "-o", "--output" },
@@ -22,7 +23,8 @@ public class CreateKnxProdCommand implements KnxRunnable {
 
 	@Option(name = { "-e", "--etsDir" },
 			description = "Set the ETS4|5 installation directory. Defaults to { C:\\Program Files (x86)\\ETS4, C:\\Program Files (x86)\\ETS5\\CV\\4.0.1997.50261 }")
-	private String[] etsDirs = { "C:\\Program Files (x86)\\ETS5\\CV\\4.0.1997.50261", "C:\\Program Files (x86)\\ETS4" };
+	private String[] etsDirs = { "C:\\Program Files (x86)\\ETS5\\CV\\5.6.241.33672",
+			"C:\\Program Files (x86)\\ETS4" };
 
 	@Option(name = { "-t", "--tempDir" },
 			description = "Set the folder for temporary files during product file creation. Defaults to ${java.io.tmpdir}\\knx-product-generator")
@@ -30,10 +32,11 @@ public class CreateKnxProdCommand implements KnxRunnable {
 
 	@Override
 	public void run(List<KnxDeviceConfig> configs) {
-		KnxProductGenerator generator = new KnxProductGenerator(outputDir, etsDirs, tempDir);
 		for (KnxDeviceConfig config : configs) {
 			try {
-				generator.createProductFile(config);
+				KnxProductGenerator generator = new KnxProductGenerator(config, outputDir, etsDirs,
+						tempDir);
+				generator.createProductFile();
 			} catch (Exception e) {
 				log.error("Product file generation failed: " + e.getMessage(), e);
 			}

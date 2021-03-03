@@ -7,6 +7,7 @@ import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlElements;
 import javax.xml.bind.annotation.XmlID;
 import javax.xml.bind.annotation.XmlSchemaType;
 import javax.xml.bind.annotation.XmlType;
@@ -16,11 +17,9 @@ import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import lombok.Data;
 
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "ComObjectParameterBlock_t",
-		propOrder = { "rows", "columns", "parameterBlocks", "parameterSeparators", "parameterRefRefs", "buttons",
-				"chooses", "binaryDataRefs", "comObjectRefRefs", "modules", "repeats", "assigns", "channels" })
+@XmlType(name = "ComObjectParameterBlock_t", propOrder = { "rows", "columns", "entries" })
 @Data
-public class ComObjectParameterBlockT {
+public class ComObjectParameterBlockT implements ComObjectParameterBlockContainer {
 
 	@XmlElement(name = "Rows")
 	protected ComObjectParameterBlockT.Rows rows;
@@ -28,38 +27,18 @@ public class ComObjectParameterBlockT {
 	@XmlElement(name = "Columns")
 	protected ComObjectParameterBlockT.Columns columns;
 
-	@XmlElement(name = "ParameterBlock")
-	protected List<ComObjectParameterBlockT> parameterBlocks = new ArrayList<ComObjectParameterBlockT>();
-
-	@XmlElement(name = "ParameterSeparator")
-	protected List<ParameterSeparatorT> parameterSeparators = new ArrayList<ParameterSeparatorT>();
-
-	@XmlElement(name = "ParameterRefRef")
-	protected List<ParameterRefRefT> parameterRefRefs = new ArrayList<ParameterRefRefT>();
-
-	@XmlElement(name = "Button")
-	protected List<ButtonT> buttons = new ArrayList<ButtonT>();
-
-	@XmlElement(name = "choose")
-	protected List<ComObjectParameterChooseT> chooses = new ArrayList<ComObjectParameterChooseT>();
-
-	@XmlElement(name = "BinaryDataRef")
-	protected List<BinaryDataRefT> binaryDataRefs = new ArrayList<BinaryDataRefT>();
-
-	@XmlElement(name = "ComObjectRefRef")
-	protected List<ComObjectRefRefT> comObjectRefRefs = new ArrayList<ComObjectRefRefT>();
-
-	@XmlElement(name = "Module")
-	protected List<ModuleT> modules = new ArrayList<ModuleT>();
-
-	@XmlElement(name = "Repeat")
-	protected List<RepeatT> repeats = new ArrayList<RepeatT>();
-
-	@XmlElement(name = "Assign")
-	protected List<AssignT> assigns = new ArrayList<AssignT>();
-
-	@XmlElement(name = "Channel")
-	protected List<ApplicationProgramChannelT> channels = new ArrayList<ApplicationProgramChannelT>();
+	@XmlElements({ @XmlElement(name = "ParameterBlock", type = ComObjectParameterBlockT.class),
+			@XmlElement(name = "ParameterSeparator", type = ParameterSeparatorT.class),
+			@XmlElement(name = "ParameterRefRef", type = ParameterRefRefT.class),
+			@XmlElement(name = "Button", type = ButtonT.class),
+			@XmlElement(name = "choose", type = ComObjectParameterChooseT.class),
+			@XmlElement(name = "BinaryDataRef", type = BinaryDataRefT.class),
+			@XmlElement(name = "ComObjectRefRef", type = ComObjectRefRefT.class),
+			@XmlElement(name = "Module", type = ModuleT.class),
+			@XmlElement(name = "Repeat", type = RepeatT.class),
+			@XmlElement(name = "Assign", type = AssignT.class),
+			@XmlElement(name = "Channel", type = ApplicationProgramChannelT.class) })
+	protected List<Object> entries = new ArrayList<Object>();
 
 	@XmlAttribute(name = "Id", required = true)
 	@XmlJavaTypeAdapter(CollapsedStringAdapter.class)
@@ -180,5 +159,22 @@ public class ComObjectParameterBlockT {
 			@XmlAttribute(name = "InternalDescription")
 			protected String internalDescription;
 		}
+	}
+
+	@Override
+	public void addParameterBlock(ComObjectParameterBlockT parameterBlock) {
+		entries.add(parameterBlock);
+	}
+
+	public void addParameterRefRef(ParameterRefRefT parameterRefRef) {
+		entries.add(parameterRefRef);
+	}
+
+	public void addComObjectRefRef(ComObjectRefRefT comObjectRefRef) {
+		entries.add(comObjectRefRef);
+	}
+
+	public void addParameterSeparator(ParameterSeparatorT parameterSeparator) {
+		entries.add(parameterSeparator);
 	}
 }

@@ -12,9 +12,10 @@ import lombok.Data;
 
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "ChannelIndependentBlock_t",
-		propOrder = { "parameterBlocks", "chooses", "binaryDataRefs", "comObjectRefRefs", "modules", "repeats" })
+		propOrder = { "parameterBlocks", "chooses", "binaryDataRefs", "comObjectRefRefs", "modules",
+				"repeats" })
 @Data
-public class ChannelIndependentBlockT {
+public class ChannelIndependentBlockT implements ComObjectParameterBlockContainer {
 
 	@XmlElement(name = "ParameterBlock")
 	protected List<ComObjectParameterBlockT> parameterBlocks = new ArrayList<ComObjectParameterBlockT>();
@@ -33,4 +34,9 @@ public class ChannelIndependentBlockT {
 
 	@XmlElement(name = "Repeat")
 	protected List<RepeatT> repeats = new ArrayList<RepeatT>();
+
+	@Override
+	public void addParameterBlock(ComObjectParameterBlockT parameterBlock) {
+		parameterBlocks.add(parameterBlock);
+	}
 }

@@ -1,9 +1,9 @@
 package lu.berscheid.knx.generator;
 
 import static lu.berscheid.knx.utils.KnxTypeUtils.isBoolean;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isDouble;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isEnum;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isFloat;
-import static lu.berscheid.knx.utils.KnxTypeUtils.isDouble;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isInteger;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isString;
 
@@ -22,8 +22,8 @@ import javax.xml.bind.Unmarshaller;
 
 import org.apache.commons.io.FileUtils;
 
-import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import lu.berscheid.knx.generator.model.ApplicationProgramChannelT;
 import lu.berscheid.knx.generator.model.ApplicationProgramDynamicT;
 import lu.berscheid.knx.generator.model.ApplicationProgramRefT;
 import lu.berscheid.knx.generator.model.ApplicationProgramStaticT;
@@ -34,6 +34,7 @@ import lu.berscheid.knx.generator.model.ApplicationProgramT;
 import lu.berscheid.knx.generator.model.ApplicationProgramTypeT;
 import lu.berscheid.knx.generator.model.CatalogSectionT;
 import lu.berscheid.knx.generator.model.ChannelIndependentBlockT;
+import lu.berscheid.knx.generator.model.ComObjectParameterBlockContainer;
 import lu.berscheid.knx.generator.model.ComObjectParameterBlockT;
 import lu.berscheid.knx.generator.model.ComObjectPriorityT;
 import lu.berscheid.knx.generator.model.ComObjectRefRefT;
@@ -62,22 +63,44 @@ import lu.berscheid.knx.generator.model.RegistrationInfoT;
 import lu.berscheid.knx.generator.model.RegistrationStatusT;
 import lu.berscheid.knx.model.KnxDeviceConfig;
 import lu.berscheid.knx.model.KnxGroupObjectConfig;
+import lu.berscheid.knx.model.KnxParameterBlockConfig;
+import lu.berscheid.knx.model.KnxParameterBlockParent;
 import lu.berscheid.knx.model.KnxParameterConfig;
 import lu.berscheid.knx.model.KnxParameterTypeConfig;
 import lu.berscheid.knx.utils.KnxTypeUtils;
 
 @Slf4j
-@AllArgsConstructor
 public class KnxProductGenerator {
 
 	private static final String KNX_CREATED_BY = "KNX MT";
 	private static final String KNX_TOOL_VERSION = "5.1.255.16695";
 
+	private KnxDeviceConfig device;
 	private String outputDir;
 	private String[] etsDirs;
 	private String tempDir;
 
-	public void createProductFile(KnxDeviceConfig device) throws Exception {
+	public KnxProductGenerator(KnxDeviceConfig device, String outputDir, String[] etsDirs,
+			String tempDir) {
+		super();
+		this.device = device;
+		this.outputDir = outputDir;
+		this.etsDirs = etsDirs;
+		this.tempDir = tempDir;
+	}
+
+	// Item counters
+	private int offset = 0;
+	private int size = 0;
+	private int blockCounter = 0, parameterCounter = 0, groupObjectCounter = 0;
+
+	private ApplicationProgramStaticT.ParameterTypes parameterTypes = new ApplicationProgramStaticT.ParameterTypes();
+	private ApplicationProgramStaticT.Parameters parameters = new ApplicationProgramStaticT.Parameters();
+	private ApplicationProgramStaticT.ParameterRefs parameterRefs = new ApplicationProgramStaticT.ParameterRefs();
+	private ComObjectTable comObjectTable = new ApplicationProgramStaticT.ComObjectTable();
+	private ComObjectRefs comObjectRefs = new ApplicationProgramStaticT.ComObjectRefs();
+
+	public void createProductFile() throws Exception {
 		KNX knx = new KNX();
 
 		ManufacturerDataT manufacturerData = new ManufacturerDataT();
@@ -131,14 +154,12 @@ public class KnxProductGenerator {
 		ApplicationProgramDynamicT appDynamic = new ApplicationProgramDynamicT();
 		applicationProgram.setDynamic(appDynamic);
 
-		ComObjectParameterBlockT parameterBlock = new ComObjectParameterBlockT();
-		parameterBlock.setName("ParameterPage");
-		parameterBlock.setText("Parameters");
-		parameterBlock.setId(String.format("%s_PB-1", applicationProgram.getId()));
-
-		ChannelIndependentBlockT channel = new ChannelIndependentBlockT();
-		channel.getParameterBlocks().add(parameterBlock);
-		appDynamic.getChannelIndependentBlocks().add(channel);
+		ApplicationProgramChannelT channel = new ApplicationProgramChannelT();
+		channel.setId(String.format("%s_CH-0", applicationProgram.getId()));
+		channel.setName("MainChannel");
+		channel.setText("Main channel");
+		channel.setNumber("0");
+		appDynamic.getApplicationProgramChannels().add(channel);
 
 		ApplicationProgramStaticT.Code code = new ApplicationProgramStaticT.Code();
 		appStatic.setCode(code);
@@ -151,95 +172,11 @@ public class KnxProductGenerator {
 				codeSegment.getLoadStateMachine(), codeSegment.getOffset()));
 		code.getRelativeSegment().add(codeSegment);
 
-		ApplicationProgramStaticT.ParameterTypes parameterTypes = new ApplicationProgramStaticT.ParameterTypes();
 		appStatic.setParameterTypes(parameterTypes);
 
-		ApplicationProgramStaticT.Parameters parameters = new ApplicationProgramStaticT.Parameters();
-		ApplicationProgramStaticT.ParameterRefs parameterRefs = new ApplicationProgramStaticT.ParameterRefs();
-		int offset = 0;
-		int size = 0;
-		int count = 0;
-		for (KnxParameterConfig parameterConfig : device.getParameters()) {
-			count++;
+		// Now generate the parameter blocks recursively
+		generateParameterBlock(channel, device, applicationProgram.getId(), codeSegment.getId());
 
-			// Create a parameter type for this parameter
-			KnxParameterTypeConfig typeConfig = parameterConfig.getTypeConfig();
-			ParameterTypeT parameterType = new ParameterTypeT();
-			parameterType.setName(String.format("PT-%d", count));
-			parameterType.setId(String.format("%s_PT-%d", applicationProgram.getId(), count));
-			String parameterDefaultValue = parameterConfig.getValue().toString();
-			// TODO deal with all parameter types
-			if (isBoolean(parameterConfig.getType())) {
-				TypeNumber typeNumber = new TypeNumber();
-				typeNumber.setSizeInBit(8);
-				typeNumber.setType("signedInt");
-				typeNumber.setMinInclusive(0);
-				typeNumber.setMaxInclusive(1);
-				typeNumber.setUiHint("CheckBox");
-				parameterType.setTypeNumber(typeNumber);
-				parameterDefaultValue = ((boolean) parameterConfig.getValue()) ? "1" : "0";
-			} else if (isInteger(parameterConfig.getType())) {
-				TypeNumber typeNumber = new TypeNumber();
-				typeNumber.setSizeInBit(typeConfig.getSizeInBit());
-				typeNumber.setType("signedInt");
-				typeNumber.setMinInclusive((long) typeConfig.getMinInclusive());
-				typeNumber.setMaxInclusive((long) typeConfig.getMaxInclusive());
-				parameterType.setTypeNumber(typeNumber);
-			} else if (isFloat(parameterConfig.getType()) || isDouble(parameterConfig.getType())) {
-				TypeFloat typeFloat = new TypeFloat();
-				typeFloat.setMinInclusive(typeConfig.getMinInclusive());
-				typeFloat.setMaxInclusive(typeConfig.getMaxInclusive());
-				parameterType.setTypeFloat(typeFloat);
-			} else if (isString(parameterConfig.getType())) {
-				TypeText typeText = new TypeText();
-				typeText.setSizeInBit(typeConfig.getSizeInBit());
-				parameterType.setTypeText(typeText);
-			} else if (isEnum(parameterConfig.getType())) {
-				TypeRestriction typeRestriction = new TypeRestriction();
-				typeRestriction.setBase("Value");
-				typeRestriction.setSizeInBit(8);
-				for (Enum<?> en : ((Class<? extends Enum>) parameterConfig.getType())
-						.getEnumConstants()) {
-					Enumeration e = new Enumeration();
-					e.setText(en.toString());
-					e.setValue(en.ordinal());
-					e.setId(parameterType.getId() + "_EN-" + e.getValue());
-					typeRestriction.getEnumeration().add(e);
-				}
-				parameterType.setTypeRestriction(typeRestriction);
-				parameterDefaultValue = String
-						.valueOf(((Enum<?>) parameterConfig.getValue()).ordinal());
-			}
-			parameterTypes.getParameterType().add(parameterType);
-
-			// Create parameters
-			ParameterT parameter = new ParameterT();
-			parameter.setName(parameterConfig.getName());
-			parameter.setText(parameterConfig.getText());
-			parameter.setValue(parameterDefaultValue);
-			parameter.setParameterType(parameterType.getId());
-			MemoryParameterT memoryParameter = new MemoryParameterT();
-			memoryParameter.setCodeSegment(codeSegment.getId());
-			memoryParameter.setOffset(offset);
-			memoryParameter.setBitOffset((short) 0);
-			int sizeInBytes = parameterConfig.getTypeConfig().getSizeInBit() / 8;
-			offset += sizeInBytes;
-			size += sizeInBytes;
-			parameter.setMemory(memoryParameter);
-			parameter.setId(String.format("%s_P-%d", applicationProgram.getId(), count));
-			parameters.getParameter().add(parameter);
-
-			// Create parameter references
-			ParameterRefT parameterRef = new ParameterRefT();
-			parameterRef.setId(String.format("%s_R-%d", parameter.getId(), count));
-			parameterRef.setRefId(parameter.getId());
-			parameterRefs.getParameterRef().add(parameterRef);
-
-			// Create parameter reference references in the parameter block
-			ParameterRefRefT parameterRefRef = new ParameterRefRefT();
-			parameterRefRef.setRefId(parameterRef.getId());
-			parameterBlock.getParameterRefRefs().add(parameterRefRef);
-		}
 		codeSegment.setSize(size);
 		appStatic.setParameters(parameters);
 		appStatic.setParameterRefs(parameterRefs);
@@ -249,40 +186,6 @@ public class KnxProductGenerator {
 
 		appStatic.setAssociationTable(new ApplicationProgramStaticT.AssociationTable());
 		appStatic.getAssociationTable().setMaxEntries(Short.MAX_VALUE);
-
-		ComObjectTable comObjectTable = new ApplicationProgramStaticT.ComObjectTable();
-		ComObjectRefs comObjectRefs = new ApplicationProgramStaticT.ComObjectRefs();
-		count = 1;
-		for (KnxGroupObjectConfig groupObjectConfig : device.getGroupObjects()) {
-			ComObjectT comObject = new ComObjectT();
-			comObject.setName(groupObjectConfig.getName());
-			comObject.setText(groupObjectConfig.getText());
-			comObject.setFunctionText(groupObjectConfig.getFunctionText());
-			comObject.setObjectSize(groupObjectConfig.getObjectSize());
-			comObject.getDatapointType().add(
-					KnxTypeUtils.convertDatapointTypeToKnxProd(groupObjectConfig.getDataPointType()));
-			comObject.setCommunication(groupObjectConfig.isCommunicationFlag());
-			comObject.setRead(groupObjectConfig.isReadFlag());
-			comObject.setWrite(groupObjectConfig.isWriteFlag());
-			comObject.setTransmit(groupObjectConfig.isTransmitFlag());
-			comObject.setUpdate(groupObjectConfig.isUpdateFlag());
-			comObject.setNumber(count++);
-			comObject
-					.setPriority(ComObjectPriorityT.valueOf(groupObjectConfig.getPriority().toString()));
-			comObject.setReadOnInitFlag(EnableT.DISABLED);
-			comObject
-					.setId(String.format("%s_O-%d", applicationProgram.getId(), comObject.getNumber()));
-			comObjectTable.getComObject().add(comObject);
-
-			ComObjectRefT comObjectRef = new ComObjectRefT();
-			comObjectRef.setId(String.format("%s_R-%d", comObject.getId(), comObject.getNumber()));
-			comObjectRef.setRefId(comObject.getId());
-			comObjectRefs.getComObjectRef().add(comObjectRef);
-
-			ComObjectRefRefT comObjectRefRef = new ComObjectRefRefT();
-			comObjectRefRef.setRefId(comObjectRef.getId());
-			parameterBlock.getComObjectRefRefs().add(comObjectRefRef);
-		}
 
 		appStatic.setComObjectTable(comObjectTable);
 		appStatic.setComObjectRefs(comObjectRefs);
@@ -407,6 +310,138 @@ public class KnxProductGenerator {
 		} catch (Exception e) {
 			log.error("Unable to create product XML file " + knxProductDirectory + knxProductFilename,
 					e);
+			e.printStackTrace();
+		}
+	}
+
+	private void generateParameterBlock(ComObjectParameterBlockContainer parent,
+			KnxParameterBlockParent parentConfig, String applicationProgramId, String codeSegmentId) {
+		for (KnxParameterBlockConfig blockConfig : parentConfig.getParameterBlocks()) {
+			blockCounter++;
+
+			ComObjectParameterBlockT parameterBlock = new ComObjectParameterBlockT();
+			parameterBlock.setName(blockConfig.getBlockName());
+			parameterBlock.setText(blockConfig.getBlockText());
+			parameterBlock.setInline(false);
+			parameterBlock.setId(String.format("%s_PB-%d", applicationProgramId, blockCounter));
+			parent.addParameterBlock(parameterBlock);
+
+			for (KnxParameterConfig parameterConfig : blockConfig.getParameters()) {
+				parameterCounter++;
+
+				// Create a parameter type for this parameter
+				KnxParameterTypeConfig typeConfig = parameterConfig.getTypeConfig();
+				ParameterTypeT parameterType = new ParameterTypeT();
+				parameterType.setName(String.format("PT-%d", parameterCounter));
+				parameterType.setId(String.format("%s_PT-%d", applicationProgramId, parameterCounter));
+				String parameterDefaultValue = parameterConfig.getValue().toString();
+				// TODO deal with all parameter types
+				if (isBoolean(parameterConfig.getType())) {
+					TypeNumber typeNumber = new TypeNumber();
+					typeNumber.setSizeInBit(8);
+					typeNumber.setType("signedInt");
+					typeNumber.setMinInclusive(0);
+					typeNumber.setMaxInclusive(1);
+					typeNumber.setUiHint("CheckBox");
+					parameterType.setTypeNumber(typeNumber);
+					parameterDefaultValue = ((boolean) parameterConfig.getValue()) ? "1" : "0";
+				} else if (isInteger(parameterConfig.getType())) {
+					TypeNumber typeNumber = new TypeNumber();
+					typeNumber.setSizeInBit(typeConfig.getSizeInBit());
+					typeNumber.setType("signedInt");
+					typeNumber.setMinInclusive((long) typeConfig.getMinInclusive());
+					typeNumber.setMaxInclusive((long) typeConfig.getMaxInclusive());
+					parameterType.setTypeNumber(typeNumber);
+				} else if (isFloat(parameterConfig.getType()) || isDouble(parameterConfig.getType())) {
+					TypeFloat typeFloat = new TypeFloat();
+					typeFloat.setMinInclusive(typeConfig.getMinInclusive());
+					typeFloat.setMaxInclusive(typeConfig.getMaxInclusive());
+					parameterType.setTypeFloat(typeFloat);
+				} else if (isString(parameterConfig.getType())) {
+					TypeText typeText = new TypeText();
+					typeText.setSizeInBit(typeConfig.getSizeInBit());
+					parameterType.setTypeText(typeText);
+				} else if (isEnum(parameterConfig.getType())) {
+					TypeRestriction typeRestriction = new TypeRestriction();
+					typeRestriction.setBase("Value");
+					typeRestriction.setSizeInBit(8);
+					for (Enum<?> en : ((Class<? extends Enum>) parameterConfig.getType())
+							.getEnumConstants()) {
+						Enumeration e = new Enumeration();
+						e.setText(en.toString());
+						e.setValue(en.ordinal());
+						e.setId(parameterType.getId() + "_EN-" + e.getValue());
+						typeRestriction.getEnumeration().add(e);
+					}
+					parameterType.setTypeRestriction(typeRestriction);
+					parameterDefaultValue = String
+							.valueOf(((Enum<?>) parameterConfig.getValue()).ordinal());
+				}
+				parameterTypes.getParameterType().add(parameterType);
+
+				// Create parameters
+				ParameterT parameter = new ParameterT();
+				parameter.setName(parameterConfig.getName());
+				parameter.setText(parameterConfig.getText());
+				parameter.setValue(parameterDefaultValue);
+				parameter.setParameterType(parameterType.getId());
+				MemoryParameterT memoryParameter = new MemoryParameterT();
+				memoryParameter.setCodeSegment(codeSegmentId);
+				memoryParameter.setOffset(offset);
+				memoryParameter.setBitOffset((short) 0);
+				int sizeInBytes = parameterConfig.getTypeConfig().getSizeInBit() / 8;
+				offset += sizeInBytes;
+				size += sizeInBytes;
+				parameter.setMemory(memoryParameter);
+				parameter.setId(String.format("%s_P-%d", applicationProgramId, parameterCounter));
+				parameters.getParameter().add(parameter);
+
+				// Create parameter references
+				ParameterRefT parameterRef = new ParameterRefT();
+				parameterRef.setId(String.format("%s_R-%d", parameter.getId(), parameterCounter));
+				parameterRef.setRefId(parameter.getId());
+				parameterRefs.getParameterRef().add(parameterRef);
+
+				// Create parameter reference references in the parameter block
+				ParameterRefRefT parameterRefRef = new ParameterRefRefT();
+				parameterRefRef.setRefId(parameterRef.getId());
+				parameterBlock.addParameterRefRef(parameterRefRef);
+			}
+
+			for (KnxGroupObjectConfig groupObjectConfig : blockConfig.getGroupObjects()) {
+				groupObjectCounter++;
+
+				ComObjectT comObject = new ComObjectT();
+				comObject.setName(groupObjectConfig.getName());
+				comObject.setText(groupObjectConfig.getText());
+				comObject.setFunctionText(groupObjectConfig.getFunctionText());
+				comObject.setObjectSize(groupObjectConfig.getObjectSize());
+				comObject.getDatapointType().add(
+						KnxTypeUtils.convertDatapointTypeToKnxProd(groupObjectConfig.getDataPointType()));
+				comObject.setCommunication(groupObjectConfig.isCommunicationFlag());
+				comObject.setRead(groupObjectConfig.isReadFlag());
+				comObject.setWrite(groupObjectConfig.isWriteFlag());
+				comObject.setTransmit(groupObjectConfig.isTransmitFlag());
+				comObject.setUpdate(groupObjectConfig.isUpdateFlag());
+				comObject.setNumber(groupObjectCounter);
+				comObject.setPriority(
+						ComObjectPriorityT.valueOf(groupObjectConfig.getPriority().toString()));
+				comObject.setReadOnInitFlag(EnableT.DISABLED);
+				comObject.setId(String.format("%s_O-%d", applicationProgramId, comObject.getNumber()));
+				comObjectTable.getComObject().add(comObject);
+
+				ComObjectRefT comObjectRef = new ComObjectRefT();
+				comObjectRef.setId(String.format("%s_R-%d", comObject.getId(), comObject.getNumber()));
+				comObjectRef.setRefId(comObject.getId());
+				comObjectRefs.getComObjectRef().add(comObjectRef);
+
+				ComObjectRefRefT comObjectRefRef = new ComObjectRefRefT();
+				comObjectRefRef.setRefId(comObjectRef.getId());
+				parameterBlock.addComObjectRefRef(comObjectRefRef);
+			}
+
+			// For each nested parameter block, do the same
+			generateParameterBlock(parameterBlock, blockConfig, applicationProgramId, codeSegmentId);
 		}
 	}
 
@@ -479,4 +514,5 @@ public class KnxProductGenerator {
 							+ System.getProperty("os.name"));
 		}
 	}
+
 }
