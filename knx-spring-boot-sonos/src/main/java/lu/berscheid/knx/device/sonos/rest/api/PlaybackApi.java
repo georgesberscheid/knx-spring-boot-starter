@@ -17,9 +17,9 @@ public interface PlaybackApi {
 	@GetMapping(value = "/groups/{groupId}/playback", produces = "application/json")
 	public PlaybackStatus getStatus(@PathVariable String groupId);
 
-	@PostMapping(value = "/households/{householdId}/groups/subscription")
-	public void subscribe(@PathVariable String householdId);
+	@PostMapping(value = "/groups/{groupId}/playback/subscription")
+	public void subscribe(@PathVariable String groupId);
 
-	@DeleteMapping(value = "/households/{householdId}/groups/subscription")
-	public void unsubscribe(@PathVariable String householdId);
+	@DeleteMapping(value = "/groups/{groupId}/playback/subscription")
+	public void unsubscribe(@PathVariable String groupId);
 }

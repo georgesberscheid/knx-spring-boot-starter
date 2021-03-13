@@ -13,16 +13,15 @@
 
 	<properties>
 		<java.version>11</java.version>
-		<calimero.version>2.5-SNAPSHOT</calimero.version>
 		<jackson-version>2.10.1</jackson-version>
 		<swagger-annotations-version>1.5.22</swagger-annotations-version>
 	</properties>
 
 	<dependencies>
-		<!-- <dependency> -->
-		<!-- <groupId>lu.berscheid.knx</groupId> -->
-		<!-- <artifactId>knx-spring-boot-autoconfigure</artifactId> -->
-		<!-- </dependency> -->
+		<dependency>
+			<groupId>lu.berscheid.knx</groupId>
+			<artifactId>knx-spring-boot-autoconfigure</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>

@@ -13,6 +13,7 @@ public class Player {
 	private String softwareVersion;
 	private String webSocketUrl;
 	private Capability[] capabilities;
+	private String groupId;
 
 	public enum Capability {
 		PLAYBACK, CLOUD, HT_PLAYBACK, HT_POWER_STATE, AIRPLAY, LINE_IN, AUDIO_CLIP, VOICE, SPEAKER_DETECTION,

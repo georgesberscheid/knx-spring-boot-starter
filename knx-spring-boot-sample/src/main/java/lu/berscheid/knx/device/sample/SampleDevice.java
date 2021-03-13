@@ -5,11 +5,10 @@ import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.R;
 import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.T;
 import static lu.berscheid.knx.annotations.KnxGroupObject.Flag.W;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import lombok.extern.slf4j.Slf4j;
 import lu.berscheid.knx.annotations.KnxDevice;
 import lu.berscheid.knx.annotations.KnxDeviceParameter;
 import lu.berscheid.knx.annotations.KnxGroupObject;
@@ -22,6 +21,7 @@ import lu.berscheid.knx.model.GroupObject;
 import lu.berscheid.knx.model.KnxException;
 
 @SpringBootApplication
+@Slf4j
 @KnxDevice(productName = "KNX Sample device", // Appears as the name in the catalog in ETS
 		applicationName = "Sample application", // Appears as application name in the catalog in ETS
 		hardwareName = "Sample virtual device",
@@ -30,8 +30,6 @@ import lu.berscheid.knx.model.KnxException;
 		hardwareSerialNumber = "SN000001",
 		productOrderNumber = "PO000001")
 public class SampleDevice {
-
-	private Logger log = LoggerFactory.getLogger(SampleDevice.class);
 
 	public static void main(String[] args) {
 		SpringApplication.run(SampleDevice.class, args);

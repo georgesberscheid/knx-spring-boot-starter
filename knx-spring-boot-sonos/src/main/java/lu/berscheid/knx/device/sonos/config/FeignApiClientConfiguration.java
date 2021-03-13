@@ -48,7 +48,7 @@ public class FeignApiClientConfiguration {
 						&& credentials.getExpiresOn().isBefore(LocalDateTime.now())) {
 					// Token expired, need to get a new one with the refresh token
 					TokenResponse token = tokenApi.getToken(TokenRequest.builder()
-							.refreshToken(credentials.getRefreshToken()).grantType("refresh_code").build());
+							.refreshToken(credentials.getRefreshToken()).grantType("refresh_token").build());
 					credentials.setAccessToken(token.getAccessToken());
 					credentials.setRefreshToken(token.getRefreshToken());
 					credentials.setExpiresOn(LocalDateTime.now().plusSeconds(token.getExpiresIn()));
