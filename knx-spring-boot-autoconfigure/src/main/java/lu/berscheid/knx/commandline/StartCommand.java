@@ -17,12 +17,13 @@ import lu.berscheid.knx.model.KnxException;
 @Slf4j
 public class StartCommand implements KnxRunnable {
 
-	@Option(name = { "-i",
-			"--gatewayIpAddress" }, description = "The IP address of the tunneling gateway. If specified, a tunneling connection is created with the given IP address. "
+	@Option(name = { "-i", "-ip", "--gatewayIpAddress" },
+			description = "The IP address of the tunneling gateway. If specified, a tunneling connection is created with the given IP address. "
 					+ "If not specified a routing connection is attempted.")
 	private String ipAddress;
 
-	@Option(name = { "-p", "--port" }, description = "The port used to connect to the IP gateway. Defaults to 3671.")
+	@Option(name = { "-p", "--port" },
+			description = "The port used to connect to the IP gateway. Defaults to 3671.")
 	private int port = 3671;
 
 	@Override

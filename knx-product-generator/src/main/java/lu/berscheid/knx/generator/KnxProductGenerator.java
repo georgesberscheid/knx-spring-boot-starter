@@ -77,6 +77,7 @@ public class KnxProductGenerator {
 	private String[] etsDirs;
 	private String tempDir;
 
+	@SuppressWarnings("unchecked")
 	public void createProductFile(KnxDeviceConfig device) throws Exception {
 		KNX knx = new KNX();
 
@@ -167,7 +168,9 @@ public class KnxProductGenerator {
 			ParameterTypeT parameterType = new ParameterTypeT();
 			parameterType.setName(String.format("PT-%d", count));
 			parameterType.setId(String.format("%s_PT-%d", applicationProgram.getId(), count));
-			String parameterDefaultValue = parameterConfig.getValue().toString();
+			String parameterDefaultValue = parameterConfig.getValue() != null
+					? parameterConfig.getValue().toString()
+					: "";
 			// TODO deal with all parameter types
 			if (isBoolean(parameterConfig.getType())) {
 				TypeNumber typeNumber = new TypeNumber();
@@ -198,7 +201,7 @@ public class KnxProductGenerator {
 				TypeRestriction typeRestriction = new TypeRestriction();
 				typeRestriction.setBase("Value");
 				typeRestriction.setSizeInBit(8);
-				for (Enum<?> en : ((Class<? extends Enum>) parameterConfig.getType())
+				for (Enum<?> en : ((Class<? extends Enum<?>>) parameterConfig.getType())
 						.getEnumConstants()) {
 					Enumeration e = new Enumeration();
 					e.setText(en.toString());

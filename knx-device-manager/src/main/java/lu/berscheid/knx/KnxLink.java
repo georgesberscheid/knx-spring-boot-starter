@@ -5,11 +5,13 @@ import static lu.berscheid.knx.utils.KnxTypeUtils.isBoolean;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import lu.berscheid.knx.model.KnxException;
 import lu.berscheid.knx.model.KnxGroupObjectConfig;
+import net.gcardone.junidecode.Junidecode;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
 import tuwien.auto.calimero.KNXException;
@@ -61,7 +63,8 @@ public class KnxLink {
 				communicator.write(new GroupAddress(groupAddress), (Integer) value,
 						DPTXlator8BitUnsigned.DPT_ANGLE.getID());
 			} else if (value instanceof String) {
-				communicator.write(new GroupAddress(groupAddress), (String) value);
+				communicator.write(new GroupAddress(groupAddress),
+						StringUtils.substring(Junidecode.unidecode((String) value), 0, 14));
 			}
 		} catch (KNXException e) {
 			throw new KnxException(
