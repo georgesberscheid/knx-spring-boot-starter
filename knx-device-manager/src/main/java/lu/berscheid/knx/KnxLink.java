@@ -63,6 +63,7 @@ public class KnxLink {
 				communicator.write(new GroupAddress(groupAddress), (Integer) value,
 						DPTXlator8BitUnsigned.DPT_ANGLE.getID());
 			} else if (value instanceof String) {
+				// Remove non-ASCII characters and trim to 14 chars
 				communicator.write(new GroupAddress(groupAddress),
 						StringUtils.substring(Junidecode.unidecode((String) value), 0, 14));
 			}

@@ -6,7 +6,7 @@
 
 	<properties>
 		<java.version>11</java.version>
-		<calimero.version>2.5-SNAPSHOT</calimero.version>
+		<calimero.version>2.6-SNAPSHOT</calimero.version>
 	</properties>
 
 	<parent>

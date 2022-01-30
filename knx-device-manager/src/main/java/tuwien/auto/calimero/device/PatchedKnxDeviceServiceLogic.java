@@ -1,16 +1,19 @@
 package tuwien.auto.calimero.device;
 
-import java.util.Arrays;
-
 import tuwien.auto.calimero.ReturnCode;
+import tuwien.auto.calimero.device.KnxDevice.Memory;
 
 /**
  * Only needed to give access to the device memory to subclasses and overwrite readMemory().
  */
 public abstract class PatchedKnxDeviceServiceLogic extends KnxDeviceServiceLogic {
 
-	protected byte[] getMemory() {
-		return getDeviceMemory();
+	protected Memory getMemory() {
+		return device.deviceMemory();
+	}
+
+	protected byte[] getMemoryBytes() {
+		return device.deviceMemory().get(0, device.deviceMemory().size() - 1);
 	}
 
 	/*
@@ -19,12 +22,12 @@ public abstract class PatchedKnxDeviceServiceLogic extends KnxDeviceServiceLogic
 	 * programming process.
 	 */
 	@Override
-	public ServiceResult readMemory(final int startAddress, final int bytes) {
-		final byte[] mem = getDeviceMemory();
-		if (startAddress >= mem.length) return ServiceResult.error(ReturnCode.AddressVoid);
-		if (startAddress + bytes >= mem.length) return ServiceResult.error(ReturnCode.AccessDenied);
+	public ServiceResult<byte[]> readMemory(final int startAddress, final int bytes) {
+		final Memory memory = device.deviceMemory();
+		if (startAddress >= memory.size()) return ServiceResult.error(ReturnCode.AddressVoid);
+		if (startAddress + bytes >= memory.size())
+			return ServiceResult.error(ReturnCode.AccessDenied);
 
-		return new ServiceResult(
-				Arrays.copyOfRange(getDeviceMemory(), startAddress, startAddress + bytes));
+		return new ServiceResult<byte[]>(memory.get(startAddress, bytes));
 	}
 }

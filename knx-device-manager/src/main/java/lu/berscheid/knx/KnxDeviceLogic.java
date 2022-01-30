@@ -1,8 +1,8 @@
 package lu.berscheid.knx;
 
 import static lu.berscheid.knx.utils.KnxTypeUtils.isBoolean;
-import static lu.berscheid.knx.utils.KnxTypeUtils.isEnum;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isDouble;
+import static lu.berscheid.knx.utils.KnxTypeUtils.isEnum;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isFloat;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isInteger;
 import static lu.berscheid.knx.utils.KnxTypeUtils.isLong;
@@ -14,8 +14,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -40,6 +40,7 @@ import tuwien.auto.calimero.dptxlator.DPTXlator64BitSigned;
 import tuwien.auto.calimero.dptxlator.DPTXlatorBoolean;
 import tuwien.auto.calimero.dptxlator.DPTXlatorDateTime;
 import tuwien.auto.calimero.dptxlator.DPTXlatorString;
+import tuwien.auto.calimero.mgmt.ManagementClient.EraseCode;
 
 @Slf4j
 public class KnxDeviceLogic extends PatchedKnxDeviceServiceLogic {
@@ -180,7 +181,7 @@ public class KnxDeviceLogic extends PatchedKnxDeviceServiceLogic {
 	 * When we receive a restart signal from ETS, reset the group objects and application program.
 	 */
 	@Override
-	public ServiceResult restart(final boolean masterReset, final EraseCode eraseCode,
+	public ServiceResult<Duration> restart(final boolean masterReset, final EraseCode eraseCode,
 			final int channel) {
 		super.restart(masterReset, eraseCode, channel);
 
@@ -207,22 +208,21 @@ public class KnxDeviceLogic extends PatchedKnxDeviceServiceLogic {
 	 */
 	protected void syncRuntimeFromMemory() {
 		// First 2 bytes of each regions in the device memory indicate the length
-		ByteBuffer deviceMemory = ByteBuffer.wrap(getMemory());
+		ByteBuffer deviceMemory = ByteBuffer.wrap(getMemoryBytes());
 		short addressTableLength = deviceMemory.getShort(0x0116);
 		short associationTableLength = deviceMemory.getShort(0x1000);
 
-		updateGroupAddressesFromMemory(
-				Arrays.copyOfRange(getMemory(), 0x0116, 0x0116 + (addressTableLength * 2) + 2),
-				Arrays.copyOfRange(getMemory(), 0x1000, 0x1000 + (associationTableLength * 4) + 2));
+		updateGroupAddressesFromMemory(getMemory().get(0x0116, addressTableLength * 2 + 2),
+				getMemory().get(0x1000, associationTableLength * 4 + 2));
 
 		// Read 4k bytes - TODO: find out what the size of the application program is
-		updateApplicationProgramFromMemory(Arrays.copyOfRange(getMemory(), 0x4000, 0x5000));
+		updateApplicationProgramFromMemory(getMemory().get(0x4000, 0x1000));
 	}
 
 	protected void syncMemoryFromRuntime() {
-		updateGroupAddressesFromRuntime(ByteBuffer.wrap(getMemory(), 0x0116, 0x0EEA),
-				ByteBuffer.wrap(getMemory(), 0x1000, 0x1000));
-		updateApplicationProgramFromRuntime(ByteBuffer.wrap(getMemory(), 0x4000, 0x1000));
+		updateGroupAddressesFromRuntime(ByteBuffer.wrap(getMemory().get(0x0116, 0x0EEA)),
+				ByteBuffer.wrap(getMemory().get(0x1000, 0x1000)));
+		updateApplicationProgramFromRuntime(ByteBuffer.wrap(getMemory().get(0x4000, 0x1000)));
 	}
 
 	/*

@@ -3,6 +3,7 @@ package lu.berscheid.knx;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Files;
 
 import lombok.extern.slf4j.Slf4j;
 import lu.berscheid.knx.model.KnxDeviceConfig;
@@ -12,6 +13,7 @@ import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.DeviceDescriptor;
 import tuwien.auto.calimero.DeviceDescriptor.DD0;
 import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.SerialNumber;
 import tuwien.auto.calimero.device.BaseKnxDevice;
 
 @Slf4j
@@ -113,12 +115,23 @@ public class KnxDeviceManager {
 			new File(iosFilePath).mkdirs();
 		}
 
+		// If the file is empty, delete it first
+		if (deviceOutputFile.exists() && deviceOutputFile.length() == 0) {
+			try {
+				Files.deleteIfExists(deviceOutputFile.toPath());
+				log.info("Deleted empty configuration file: " + deviceOutputFile);
+			} catch (IOException e) {
+				log.warn(
+						"Tried to delete file but failed: " + deviceOutputFile + ". " + e.getMessage());
+			}
+		}
+
 		BaseKnxDevice device = new BaseKnxDevice(deviceConfig.getApplicationName(), logic,
 				deviceOutputFile.toURI(), new char[] { 0 });
-		DeviceDescriptor deviceDescriptor = DD0.TYPE_07B0;
+		DeviceDescriptor.DD0 deviceDescriptor = DD0.TYPE_07B0;
 		int manufacturerId = Integer.parseInt(deviceConfig.getManufacturerRefId().substring(2), 16);
 		// TODO: get serialNumber, hardwareType, programVersion from deviceConfig
-		final byte[] serialNumber = DataUnitBuilder.fromHex("000a1c112913"); // 6 bytes
+		SerialNumber serialNumber = SerialNumber.of(43420559635L); // 6 bytes: 0x000a1c112913
 		final byte[] hardwareType = DataUnitBuilder.fromHex("000000000223"); // 6 bytes
 		final byte[] programVersion = new byte[] { 0, 4, 0, 0, 0 }; // 5 bytes
 		// a valid FDSK is only required for secure device download
